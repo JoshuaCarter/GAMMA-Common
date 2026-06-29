@@ -7,6 +7,7 @@
 	  dorn_mcm.bool(mod_id, key, default)
 	  dorn_mcm.number(mod_id, key, default)
 	  dorn_mcm.string(mod_id, key, default)
+	  dorn_mcm.key(mod_id, key, default)   -- MCM key_bind; nil/-1 = unbound
 
 	Example:
 	  local var = dorn_mcm.number("mod_id", "config_key", "default_value")
@@ -61,4 +62,12 @@ function dorn_mcm.string(mod_id, key, default)
 		return default
 	end
 	return tostring(value)
+end
+
+function dorn_mcm.key(mod_id, key, default)
+	local value = dorn_mcm.get(mod_id, key, default)
+	if value == nil or value == -1 then
+		return nil
+	end
+	return value
 end
