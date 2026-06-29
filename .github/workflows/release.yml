@@ -25,8 +25,10 @@ jobs:
       - name: Derive mod name from repo
         id: name
         run: |
-          TITLE="Dorns Common"
-          FILENAME="000-Dorns_Common"
+          TITLE="${{ github.event.repository.name }}"
+          TITLE="${TITLE//-/ }"
+          TITLE="${TITLE/GAMMA/Dorns}"
+          FILENAME="${TITLE// /_}"
           echo "title=$TITLE" >> "$GITHUB_OUTPUT"
           echo "filename=$FILENAME" >> "$GITHUB_OUTPUT"
 

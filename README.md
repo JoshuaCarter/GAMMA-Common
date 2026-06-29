@@ -5,32 +5,22 @@ Shared library for Dorn's G.A.M.M.A. mods:
 - `dorn_dbg.script` — on-screen debug HUD (`_G.dorn_dbg`)
 - `dorn_mcm.script` — MCM getter helpers (`_G.dorn_mcm`)
 
+GitHub repo: **GAMMA-Common** → MO2 install folder **Dorns_Common**.
+
 ## MO2 install
 
-1. Enable this mod in Mod Organizer 2.
-2. Keep it **above** your other Dorn mods in load order (the `000-` prefix helps).
-3. Each feature mod (Bleed Fix, Prone Fix, etc.) depends on these scripts at runtime.
+1. Install **Dorns_Common** from [releases](https://github.com/JoshuaCarter/GAMMA-Common/releases).
+2. Enable it **above** your other Dorn mods in load order.
+3. Feature mods do not bundle these scripts; this mod provides them at runtime.
 
-## Source repo / submodule
+## Dev / submodule
 
-This folder is also the **`dorn-common`** git repo. Feature mods vendor it as a submodule at `dorn-common/` for development and copy the scripts into release zips.
-
-After creating the GitHub repo:
+Feature mods pin this repo as the `GAMMA-common` submodule. CI copies the two scripts into release zips before packaging.
 
 ```bash
-git submodule add https://github.com/JoshuaCarter/dorn-common.git dorn-common
+git submodule add -b main https://github.com/JoshuaCarter/GAMMA-Common.git GAMMA-common
 git submodule update --init --recursive
 ```
-
-## Dev: vendor into a feature mod zip
-
-From a feature mod repo root:
-
-```bash
-bash scripts/vendor-dorn-common.sh
-```
-
-Copies `dorn-common/gamedata/scripts/dorn_*.script` into that mod's `gamedata/scripts/` (used by CI before zipping).
 
 ## API quick reference
 
