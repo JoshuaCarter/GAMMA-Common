@@ -1,0 +1,64 @@
+--[[
+	Dorn MCM — thin getters/setters over ui_mcm.
+
+	API:
+	  dorn_mcm.get(mod_id, key, default)
+	  dorn_mcm.set(mod_id, key, value)
+	  dorn_mcm.bool(mod_id, key, default)
+	  dorn_mcm.number(mod_id, key, default)
+	  dorn_mcm.string(mod_id, key, default)
+
+	Example:
+	  local var = dorn_mcm.number("mod_id", "config_key", "default_value")
+	  dorn_mcm.set("mod_id", "config_key", "value")
+]]
+
+_G.dorn_mcm = _G.dorn_mcm or {}
+local dorn_mcm = _G.dorn_mcm
+
+function path(mod_id, key)
+	return tostring(mod_id) .. "/" .. tostring(key)
+end
+
+function dorn_mcm.get(mod_id, key, default)
+	if ui_mcm then
+		local value = ui_mcm.get(path(mod_id, key))
+		if value ~= nil then
+			return value
+		end
+	end
+	return default
+end
+
+function dorn_mcm.set(mod_id, key, value)
+	if ui_mcm and ui_mcm.set then
+		ui_mcm.set(path(mod_id, key), value)
+	end
+end
+
+function dorn_mcm.bool(mod_id, key, default)
+	return dorn_mcm.get(mod_id, key, default) == true
+end
+
+function dorn_mcm.number(mod_id, key, default)
+	local value = dorn_mcm.get(mod_id, key, default)
+	if type(value) == "number" then
+		return value
+	end
+	local n = tonumber(value)
+	if n ~= nil then
+		return n
+	end
+	if type(default) == "number" then
+		return default
+	end
+	return 0
+end
+
+function dorn_mcm.string(mod_id, key, default)
+	local value = dorn_mcm.get(mod_id, key, default)
+	if value == nil then
+		return default
+	end
+	return tostring(value)
+end
