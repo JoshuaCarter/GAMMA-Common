@@ -169,7 +169,7 @@ local function render()
 			lines[#lines + 1] = ""
 		end
 		-- section header: source / mod id
-		lines[#lines + 1] = dorn_dbg.COLORS.dark_gray .. "[" .. name .. "]"
+		lines[#lines + 1] = dorn_dbg.COLORS.white .. "[" .. name .. "]"
 
 		local max_order = -1
 		for order in pairs(slots) do
