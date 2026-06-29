@@ -22,6 +22,16 @@ git submodule add -b main https://github.com/JoshuaCarter/GAMMA-Common.git GAMMA
 git submodule update --init --recursive
 ```
 
+### Auto-sync on push
+
+Feature mods ship `githooks/pre-push` (one file). Enable once per clone:
+
+```bash
+git config core.hooksPath githooks
+```
+
+If Common moved on `main`, the hook commits the submodule bump and asks you to `git push` again.
+
 ## API quick reference
 
 ```lua
