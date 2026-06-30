@@ -42,6 +42,8 @@ dbg.log("my_mod_id", { order = 0, color = "green" }, "status line", "MyMod")
 
 local mcm = _G.dorn_mcm
 local scale = mcm.number("my_mod_id", "main/foo")  -- use `def` in on_mcm_load only
+local blur = mcm.range("my_mod_id", "main/blur_min", "main/blur_max", 50, 0)
+local intensity = blur:normalize(msv)
 
 local sys = _G.dorn_sys
 RegisterScriptCallback("on_option_change", on_option_change)

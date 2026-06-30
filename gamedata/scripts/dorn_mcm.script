@@ -8,9 +8,13 @@
 	  dorn_mcm.number(mod_id, key, default)
 	  dorn_mcm.string(mod_id, key, default)
 	  dorn_mcm.key(mod_id, key, default)   -- MCM key_bind; nil/-1 = unbound
+	  dorn_mcm.range(mod_id, min_key, max_key, min_default, max_default, min_floor)
+	    -> { min, max, normalize(value) -> 0..1 }
 
 	Example:
 	  local var = dorn_mcm.number("mod_id", "config_key", "default_value")
+	  local blur = dorn_mcm.range("mod_id", "main/blur_min", "main/blur_max", 50, 0)
+	  local intensity = blur:normalize(msv)
 	  dorn_mcm.set("mod_id", "config_key", "value")
 ]]
 
@@ -70,4 +74,34 @@ function dorn_mcm.key(mod_id, key, default)
 		return nil
 	end
 	return value
+end
+
+function dorn_mcm.range(mod_id, min_key, max_key, min_default, max_default, min_floor)
+	local min_val = dorn_mcm.number(mod_id, min_key, min_default)
+	local max_val = dorn_mcm.number(mod_id, max_key, max_default)
+	local floor_val = min_floor or 1
+
+	if max_val > 0 and min_val >= max_val then
+		min_val = math.max(floor_val, max_val - 1)
+	end
+
+	local range = {
+		min = min_val,
+		max = max_val,
+	}
+
+	function range:normalize(value)
+		if self.max <= 0 or self.max <= self.min then
+			return 0
+		end
+		if value < self.min then
+			return 0
+		end
+		if value >= self.max then
+			return 1
+		end
+		return (value - self.min) / (self.max - self.min)
+	end
+
+	return range
 end
