@@ -16,11 +16,17 @@ GitHub repo: **GAMMA-Common** → MO2 install folder **Dorns_Common**.
 
 ## Dev / submodule
 
-Feature mods pin this repo as the `GAMMA-common` submodule. CI copies the scripts into release zips before packaging.
+Feature mods pin this repo as the `GAMMA-common` submodule. Release CI merges all of `gamedata/` into each mod zip via `tools/vendor-gamedata.sh` (no per-mod file list to maintain).
 
 ```bash
 git submodule add -b main https://github.com/JoshuaCarter/GAMMA-Common.git GAMMA-common
 git submodule update --init --recursive
+```
+
+Release workflow step:
+
+```bash
+bash GAMMA-common/tools/vendor-gamedata.sh gamedata
 ```
 
 ### Auto-sync on push
