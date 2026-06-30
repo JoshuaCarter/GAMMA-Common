@@ -231,9 +231,5 @@ function dorn_dbg.clear()
 end
 
 function on_game_start()
-	sources = {}
-end
-
-function on_game_end()
 	dorn_dbg.clear()
 end
