@@ -1,0 +1,56 @@
+--[[
+	Dorn mod runtime — gate feature logic until shared deps and config are ready.
+
+	API:
+	  ctx, actor = dorn_sys.ready(mod_id, db, load_fn)
+
+	Call at the top of hot paths (actor_on_update, on_key_press, etc.). Pass the global
+	`db` module (not a callback arg) and your MCM sync fn — usually on_option_change.
+
+	Returns nil when dorn_mcm, dorn_dbg, or db.actor are not ready yet. On first success
+	per game session, calls load_fn once when provided to populate CONFIG, then returns a
+	ctx table (actor, db, mcm, dbg shorthands) plus actor as a second value for destructuring.
+	load_fn is optional for gate-only checks (e.g. before_hit) after config is already loaded.
+
+	`on_option_change` is NOT fired on game start — only when MCM/options Apply in-game.
+	Register it separately so live MCM updates still refresh CONFIG after the first ready().
+
+	Example:
+	  local ctx, actor = dorn_sys.ready(MOD_ID, db, on_option_change)
+	  if not ctx then return end
+]]
+
+_G.dorn_sys = _G.dorn_sys or {}
+local dorn_sys = _G.dorn_sys
+
+local loaded_configs = {}
+
+local function check_deps(db)
+	return
+		_G.dorn_mcm ~= nil and
+		_G.dorn_dbg ~= nil and
+		db ~= nil and
+		db.actor ~= nil
+end
+
+function dorn_sys.ready(mod_id, db, load_fn)
+	if not check_deps(db) then
+		return nil
+	end
+	if load_fn and not loaded_configs[mod_id] then
+		load_fn()
+		loaded_configs[mod_id] = true
+	end
+	local actor = db.actor
+	local ctx = {
+		actor = actor,
+		db = db,
+		mcm = _G.dorn_mcm,
+		dbg = _G.dorn_dbg,
+	}
+	return ctx, actor
+end
+
+function on_game_start()
+	loaded_configs = {}
+end

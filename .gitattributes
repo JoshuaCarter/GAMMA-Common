@@ -1,0 +1,3 @@
+# Normalize STALKER script sources to LF (avoids CRLF doubling in editors)
+*.script text eol=lf
+*.ltx text eol=lf

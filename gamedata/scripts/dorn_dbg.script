@@ -9,12 +9,15 @@
 	Writing the same (source, order) again replaces that slot.
 
 	API:
-	  dorn_dbg.set_enabled(source, state)        -- per-source on/off
-	  dorn_dbg.write(source, order, msg, color)  -- set/replace a slot
-	  dorn_dbg.clear()                           -- wipe everything
-	  dorn_dbg.COLORS                            -- color markup table
+	  dorn_dbg.set_enabled(source, state)        	-- per-source on/off
+	  dorn_dbg.write(source, order, msg, color)  	-- set/replace a slot
+	  dorn_dbg.log(source, slot, msg, tag)       	-- slot = { order, color } or order; color = name string
+	  dorn_dbg.color(name)                       	-- resolve color name to markup
+	  dorn_dbg.clear()                           	-- wipe everything
+	  dorn_dbg.COLORS                            	-- color markup table
 
-	`color` is optional — pass a value from dorn_dbg.COLORS (defaults to white).
+	`color` in write/log is optional — pass a color name string (e.g. "green"),
+	a key from dorn_dbg.COLORS, or raw "%c[...]" markup (defaults to white).
 	Logger does not read MCM; each caller must call set_enabled().
 ]]
 
@@ -89,6 +92,10 @@ local function resolve_color(color)
 		return color
 	end
 	return dorn_dbg.COLORS[color] or dorn_dbg.COLORS.white
+end
+
+function dorn_dbg.color(color)
+	return resolve_color(color)
 end
 
 -- sources[source] = { enabled = bool, slots = { [order] = { msg, color } } }
@@ -223,6 +230,22 @@ function dorn_dbg.write(source, order, msg, color)
 	end
 	s.slots[order] = { msg = tostring(msg), color = color }
 	render()
+end
+
+function dorn_dbg.log(source, slot, msg, tag)
+	local s = get_source(source)
+	if not s.enabled then
+		return
+	end
+	local order, color
+	if type(slot) == "table" then
+		order = slot.order or 0
+		color = slot.color
+	else
+		order = slot or 0
+	end
+	local prefix = tag and ("[" .. tag .. "] ") or ""
+	dorn_dbg.write(source, order, prefix .. tostring(msg), color)
 end
 
 function dorn_dbg.clear()

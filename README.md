@@ -4,6 +4,7 @@ Shared library for Dorn's G.A.M.M.A. mods:
 
 - `dorn_dbg.script` — on-screen debug HUD (`_G.dorn_dbg`)
 - `dorn_mcm.script` — MCM getter helpers (`_G.dorn_mcm`)
+- `dorn_sys.script` — mod bind/sync/ready helpers (`_G.dorn_sys`)
 
 GitHub repo: **GAMMA-Common** → MO2 install folder **Dorns_Common**.
 
@@ -15,7 +16,7 @@ GitHub repo: **GAMMA-Common** → MO2 install folder **Dorns_Common**.
 
 ## Dev / submodule
 
-Feature mods pin this repo as the `GAMMA-common` submodule. CI copies the two scripts into release zips before packaging.
+Feature mods pin this repo as the `GAMMA-common` submodule. CI copies the scripts into release zips before packaging.
 
 ```bash
 git submodule add -b main https://github.com/JoshuaCarter/GAMMA-Common.git GAMMA-common
@@ -37,8 +38,14 @@ If Common moved on `main`, the hook commits the submodule bump and asks you to `
 ```lua
 local dbg = _G.dorn_dbg
 dbg.set_enabled("my_mod_id", true)
-dbg.write("my_mod_id", 0, "status line", dbg.COLORS.green)
+dbg.log("my_mod_id", { order = 0, color = "green" }, "status line", "MyMod")
 
 local mcm = _G.dorn_mcm
-local scale = mcm.number("my_mod_id", "main/foo", 1.0)
+local scale = mcm.number("my_mod_id", "main/foo")  -- use `def` in on_mcm_load only
+
+local sys = _G.dorn_sys
+RegisterScriptCallback("on_option_change", on_option_change)
+
+local ctx, actor = sys.ready("my_mod_id", db, on_option_change)
+if not ctx then return end
 ```
