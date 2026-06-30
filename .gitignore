@@ -3,3 +3,7 @@ Desktop.ini
 .DS_Store
 *.swp
 *~
+
+# Log files
+*.log
+**/logs/
