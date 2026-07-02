@@ -101,6 +101,8 @@ The synced commit is recorded on the first line of `<mod_id>_common.script` (use
 -- dorn-common-commit: a9f6380b
 ```
 
+The entry script also `printf`s a one-line startup log (`[DORN] <mod_id>: common loaded (common_<hash>, commit <hash>)`) so you can confirm which commit is actually loaded in-game, e.g. via the log console or `Dorns_FPS_Counter`'s log file.
+
 ## Setup (once per mod)
 
 ```bash

@@ -13,6 +13,8 @@ local sys = _G[COMMON_DIR .. "/dorn_sys"]
 
 sys.set_deps(mcm, dbg)
 
+printf("[DORN] @MOD_ID@: common loaded (%s, commit @COMMIT@)", COMMON_DIR)
+
 function path()
 	return COMMON_DIR
 end

@@ -122,7 +122,7 @@ TEMPLATE=""
 expected_entry() {
 	local tmp="$1"
 	[[ -f "$TEMPLATE" ]] || return 1
-	sed -e "s/@COMMON_DIR@/$DIR/g" -e "s/@COMMIT@/$COMMIT/g" "$TEMPLATE" > "$tmp"
+	sed -e "s/@COMMON_DIR@/$DIR/g" -e "s/@COMMIT@/$COMMIT/g" -e "s/@MOD_ID@/$MOD_ID/g" "$TEMPLATE" > "$tmp"
 }
 
 verify_install() {
