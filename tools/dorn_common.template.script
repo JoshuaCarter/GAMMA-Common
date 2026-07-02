@@ -1,0 +1,35 @@
+-- dorn-common-commit: @COMMIT@
+--[[ AUTO-GENERATED — synced from GAMMA-Common (@COMMON_DIR@) ]]
+
+local COMMON_DIR = "@COMMON_DIR@"
+
+process_file(COMMON_DIR .. "/dorn_mcm")
+process_file(COMMON_DIR .. "/dorn_dbg")
+process_file(COMMON_DIR .. "/dorn_sys")
+
+local mcm = _G[COMMON_DIR .. "/dorn_mcm"]
+local dbg = _G[COMMON_DIR .. "/dorn_dbg"]
+local sys = _G[COMMON_DIR .. "/dorn_sys"]
+
+sys.set_deps(mcm, dbg)
+
+function path()
+	return COMMON_DIR
+end
+
+function get()
+	return {
+		COMMIT = "@COMMIT@",
+		COMMON_DIR = COMMON_DIR,
+		mcm = mcm,
+		dbg = dbg,
+		sys = sys,
+	}
+end
+
+function init(mod_id)
+	if mod_id then
+		sys.reset_mod(mod_id)
+		dbg.clear_source(mod_id)
+	end
+end

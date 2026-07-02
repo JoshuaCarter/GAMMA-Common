@@ -1,105 +1,64 @@
 --[[
-	Dorn game log — fixed-slot on-screen debug readout.
+	Dorn game log — fixed-slot on-screen debug readout (namespace module, no globals).
 
-	Multiple mods share this single global. State is namespaced per `source`
-	(usually the caller's MOD_ID) so sibling Dorn mods don't fight over one
-	enable flag / slot table / HUD static.
-
-	Each entry is keyed by `order` within a source: 0 = top line, 1 = next, etc.
-	Writing the same (source, order) again replaces that slot.
-
-	API:
-	  dorn_dbg.set_enabled(source, state)        	-- per-source on/off
-	  dorn_dbg.write(source, order, msg, color)  	-- set/replace a slot
-	  dorn_dbg.log(source, slot, msg, tag)       	-- slot = { order, color } or order; color = name string
-	  dorn_dbg.color(name)                       	-- resolve color name to markup
-	  dorn_dbg.clear()                           	-- wipe everything
-	  dorn_dbg.COLORS                            	-- color markup table
-
-	`color` in write/log is optional — pass a color name string (e.g. "green"),
-	a key from dorn_dbg.COLORS, or raw "%c[...]" markup (defaults to white).
-	Logger does not read MCM; each caller must call set_enabled().
+	Loaded via <mod_id>_common; use DORN.dbg from <mod_id>_common.get().
 ]]
-
-_G.dorn_dbg = _G.dorn_dbg or {}
-local dorn_dbg = _G.dorn_dbg
 
 local HUD_STATIC = "debug_info"
 local ORIGIN_X = 10
 local ORIGIN_Y = 10
 
--- known color names -> a,r,g,b markup for complex_mode statics
-dorn_dbg.COLORS = {
-	-- neutrals
+local COLORS = {
 	white       = "%c[255,255,255,255]",
 	light_gray  = "%c[255,210,210,210]",
 	gray        = "%c[255,160,160,160]",
 	dark_gray   = "%c[255,96,96,96]",
 	black       = "%c[255,16,16,16]",
-
-	-- red
 	light_red   = "%c[255,255,140,140]",
 	red         = "%c[255,255,64,64]",
 	dark_red    = "%c[255,170,32,32]",
-
-	-- green
 	light_green = "%c[255,150,255,150]",
 	green       = "%c[255,96,224,96]",
 	dark_green  = "%c[255,40,150,40]",
-
-	-- blue
 	light_blue  = "%c[255,150,190,255]",
 	blue        = "%c[255,96,160,255]",
 	dark_blue   = "%c[255,48,90,200]",
-
-	-- yellow
 	light_yellow= "%c[255,255,240,150]",
 	yellow      = "%c[255,255,224,64]",
 	dark_yellow = "%c[255,200,170,32]",
-
-	-- cyan
 	light_cyan  = "%c[255,170,240,255]",
 	cyan        = "%c[255,96,224,255]",
 	dark_cyan   = "%c[255,40,160,180]",
-
-	-- orange
 	light_orange= "%c[255,255,200,130]",
 	orange      = "%c[255,255,160,48]",
 	dark_orange = "%c[255,200,110,24]",
-
-	-- purple
 	light_purple= "%c[255,210,170,255]",
 	purple      = "%c[255,170,96,255]",
 	dark_purple = "%c[255,110,48,170]",
-
-	-- pink
 	light_pink  = "%c[255,255,190,225]",
 	pink        = "%c[255,255,128,200]",
 	dark_pink   = "%c[255,200,72,140]",
-
-	-- extra hues
 	magenta     = "%c[255,255,64,255]",
 	teal        = "%c[255,32,170,160]",
 	lime        = "%c[255,170,255,64]",
 	brown       = "%c[255,150,100,60]",
 }
 
+local sources = {}
+
 local function resolve_color(color)
 	if color == nil then
-		return dorn_dbg.COLORS.white
+		return COLORS.white
 	end
 	if type(color) == "string" and color:sub(1, 3) == "%c[" then
 		return color
 	end
-	return dorn_dbg.COLORS[color] or dorn_dbg.COLORS.white
+	return COLORS[color] or COLORS.white
 end
 
-function dorn_dbg.color(color)
+function color(color)
 	return resolve_color(color)
 end
-
--- sources[source] = { enabled = bool, slots = { [order] = { msg, color } } }
-local sources = {}
 
 local function get_source(source)
 	source = source or "default"
@@ -118,7 +77,6 @@ local function any_enabled()
 	return false
 end
 
--- Re-fetch (and re-add) the static every call; do not cache.
 local function get_static()
 	local hud = get_hud()
 	if not hud then
@@ -158,7 +116,6 @@ local function render()
 	end
 	wnd:SetWndPos(vector2():set(ORIGIN_X, ORIGIN_Y))
 
-	-- stable source order so lines don't jump around frame to frame
 	local names = {}
 	for name, s in pairs(sources) do
 		if s.enabled then
@@ -171,12 +128,10 @@ local function render()
 	for _, name in ipairs(names) do
 		local slots = sources[name].slots
 
-		-- blank separator between sections
 		if #lines > 0 then
 			lines[#lines + 1] = ""
 		end
-		-- section header: source / mod id
-		lines[#lines + 1] = dorn_dbg.COLORS.white .. "[" .. name .. "]"
+		lines[#lines + 1] = COLORS.white .. "[" .. name .. "]"
 
 		local max_order = -1
 		for order in pairs(slots) do
@@ -202,7 +157,7 @@ local function render()
 	wnd:TextControl():SetTextST(table.concat(lines, "\\n"))
 end
 
-function dorn_dbg.set_enabled(source, state)
+function set_enabled(source, state)
 	local s = get_source(source)
 	local on = state == true
 	if s.enabled == on then
@@ -220,7 +175,7 @@ function dorn_dbg.set_enabled(source, state)
 	render()
 end
 
-function dorn_dbg.write(source, order, msg, color)
+function write(source, order, msg, color)
 	local s = get_source(source)
 	if not s.enabled then
 		return
@@ -232,27 +187,37 @@ function dorn_dbg.write(source, order, msg, color)
 	render()
 end
 
-function dorn_dbg.log(source, slot, msg, tag)
+function log(source, slot, msg, tag)
 	local s = get_source(source)
 	if not s.enabled then
 		return
 	end
-	local order, color
+	local order, slot_color
 	if type(slot) == "table" then
 		order = slot.order or 0
-		color = slot.color
+		slot_color = slot.color
 	else
 		order = slot or 0
 	end
 	local prefix = tag and ("[" .. tag .. "] ") or ""
-	dorn_dbg.write(source, order, prefix .. tostring(msg), color)
+	write(source, order, prefix .. tostring(msg), slot_color)
 end
 
-function dorn_dbg.clear()
+function clear_source(source)
+	if not source then
+		return
+	end
+	local s = sources[source]
+	if not s then
+		return
+	end
+	s.slots = {}
+	render()
+end
+
+function clear()
 	sources = {}
 	clear_screen()
 end
 
-function on_game_start()
-	dorn_dbg.clear()
-end
+getfenv().COLORS = COLORS

@@ -1,39 +1,23 @@
 --[[
-	Dorn mod runtime — gate feature logic until shared deps and config are ready.
+	Dorn mod runtime — gate feature logic until deps and config are ready.
 
-	API:
-	  ctx, actor = dorn_sys.ready(mod_id, db, load_fn)
-
-	Call at the top of hot paths (actor_on_update, on_key_press, etc.). Pass the global
-	`db` module (not a callback arg) and your MCM sync fn — usually on_option_change.
-
-	Returns nil when dorn_mcm, dorn_dbg, or db.actor are not ready yet. On first success
-	per game session, calls load_fn once when provided to populate CONFIG, then returns a
-	ctx table (actor, db, mcm, dbg shorthands) plus actor as a second value for destructuring.
-	load_fn is optional for gate-only checks (e.g. before_hit) after config is already loaded.
-
-	`on_option_change` is NOT fired on game start — only when MCM/options Apply in-game.
-	Register it separately so live MCM updates still refresh CONFIG after the first ready().
-
-	Example:
-	  local ctx, actor = dorn_sys.ready(MOD_ID, db, on_option_change)
-	  if not ctx then return end
+	Wired by <mod_id>_common via set_deps(mcm, dbg). Use DORN.sys from <mod_id>_common.get().
 ]]
 
-_G.dorn_sys = _G.dorn_sys or {}
-local dorn_sys = _G.dorn_sys
-
+local _mcm = nil
+local _dbg = nil
 local loaded_configs = {}
 
-local function check_deps(db)
-	return
-		_G.dorn_mcm ~= nil and
-		_G.dorn_dbg ~= nil and
-		db ~= nil and
-		db.actor ~= nil
+function set_deps(mcm, dbg)
+	_mcm = mcm
+	_dbg = dbg
 end
 
-function dorn_sys.ready(mod_id, db, load_fn)
+local function check_deps(db)
+	return _mcm ~= nil and _dbg ~= nil and db ~= nil and db.actor ~= nil
+end
+
+function ready(mod_id, db, load_fn)
 	if not check_deps(db) then
 		return nil
 	end
@@ -45,12 +29,18 @@ function dorn_sys.ready(mod_id, db, load_fn)
 	local ctx = {
 		actor = actor,
 		db = db,
-		mcm = _G.dorn_mcm,
-		dbg = _G.dorn_dbg,
+		mcm = _mcm,
+		dbg = _dbg,
 	}
 	return ctx, actor
 end
 
-function on_game_start()
+function reset_mod(mod_id)
+	if mod_id then
+		loaded_configs[mod_id] = nil
+	end
+end
+
+function reset_session()
 	loaded_configs = {}
 end

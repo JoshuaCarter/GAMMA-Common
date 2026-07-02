@@ -1,31 +1,14 @@
 --[[
-	Dorn MCM — thin getters/setters over ui_mcm.
+	Dorn MCM — thin getters/setters over ui_mcm (namespace module, no globals).
 
-	API:
-	  dorn_mcm.get(mod_id, key, default)
-	  dorn_mcm.set(mod_id, key, value)
-	  dorn_mcm.bool(mod_id, key, default)
-	  dorn_mcm.number(mod_id, key, default)
-	  dorn_mcm.string(mod_id, key, default)
-	  dorn_mcm.key(mod_id, key, default)   -- MCM key_bind; nil/-1 = unbound
-	  dorn_mcm.range(mod_id, min_key, max_key, min_default, max_default, min_floor)
-	    -> { min, max, normalize(value) -> 0..1 }
-
-	Example:
-	  local var = dorn_mcm.number("mod_id", "config_key", "default_value")
-	  local blur = dorn_mcm.range("mod_id", "main/blur_min", "main/blur_max", 50, 0)
-	  local intensity = blur:normalize(msv)
-	  dorn_mcm.set("mod_id", "config_key", "value")
+	Loaded via <mod_id>_common; use DORN.mcm from <mod_id>_common.get().
 ]]
-
-_G.dorn_mcm = _G.dorn_mcm or {}
-local dorn_mcm = _G.dorn_mcm
 
 local function path(mod_id, key)
 	return tostring(mod_id) .. "/" .. tostring(key)
 end
 
-function dorn_mcm.get(mod_id, key, default)
+function get(mod_id, key, default)
 	if ui_mcm then
 		local value = ui_mcm.get(path(mod_id, key))
 		if value ~= nil then
@@ -35,18 +18,18 @@ function dorn_mcm.get(mod_id, key, default)
 	return default
 end
 
-function dorn_mcm.set(mod_id, key, value)
+function set(mod_id, key, value)
 	if ui_mcm and ui_mcm.set then
 		ui_mcm.set(path(mod_id, key), value)
 	end
 end
 
-function dorn_mcm.bool(mod_id, key, default)
-	return dorn_mcm.get(mod_id, key, default) == true
+function bool(mod_id, key, default)
+	return get(mod_id, key, default) == true
 end
 
-function dorn_mcm.number(mod_id, key, default)
-	local value = dorn_mcm.get(mod_id, key, default)
+function number(mod_id, key, default)
+	local value = get(mod_id, key, default)
 	if type(value) == "number" then
 		return value
 	end
@@ -60,37 +43,37 @@ function dorn_mcm.number(mod_id, key, default)
 	return 0
 end
 
-function dorn_mcm.string(mod_id, key, default)
-	local value = dorn_mcm.get(mod_id, key, default)
+function string(mod_id, key, default)
+	local value = get(mod_id, key, default)
 	if value == nil then
 		return default
 	end
 	return tostring(value)
 end
 
-function dorn_mcm.key(mod_id, key, default)
-	local value = dorn_mcm.get(mod_id, key, default)
+function key(mod_id, key, default)
+	local value = get(mod_id, key, default)
 	if value == nil or value == -1 then
 		return nil
 	end
 	return value
 end
 
-function dorn_mcm.range(mod_id, min_key, max_key, min_default, max_default, min_floor)
-	local min_val = dorn_mcm.number(mod_id, min_key, min_default)
-	local max_val = dorn_mcm.number(mod_id, max_key, max_default)
+function range(mod_id, min_key, max_key, min_default, max_default, min_floor)
+	local min_val = number(mod_id, min_key, min_default)
+	local max_val = number(mod_id, max_key, max_default)
 	local floor_val = min_floor or 1
 
 	if max_val > 0 and min_val >= max_val then
 		min_val = math.max(floor_val, max_val - 1)
 	end
 
-	local range = {
+	local result = {
 		min = min_val,
 		max = max_val,
 	}
 
-	function range:normalize(value)
+	function result:normalize(value)
 		if self.max <= 0 or self.max <= self.min then
 			return 0
 		end
@@ -103,5 +86,5 @@ function dorn_mcm.range(mod_id, min_key, max_key, min_default, max_default, min_
 		return (value - self.min) / (self.max - self.min)
 	end
 
-	return range
+	return result
 end

@@ -1,0 +1,23 @@
+{
+	"version": "2.0.0",
+	"tasks": [
+		{
+			"label": "Dorn: Sync Common",
+			"type": "shell",
+			"command": "bash",
+			"args": ["C:/GAMMA/mods/Dorns_Common/tools/sync-dorn-common.sh"],
+			"options": { "cwd": "${fileDirname}" },
+			"problemMatcher": [],
+			"presentation": { "reveal": "always", "panel": "shared" }
+		},
+		{
+			"label": "Dorn: Check Common",
+			"type": "shell",
+			"command": "bash",
+			"args": ["C:/GAMMA/mods/Dorns_Common/tools/sync-dorn-common.sh", "--check"],
+			"options": { "cwd": "${fileDirname}" },
+			"problemMatcher": [],
+			"presentation": { "reveal": "always", "panel": "shared" }
+		}
+	]
+}
