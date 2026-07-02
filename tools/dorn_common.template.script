@@ -1,32 +1,44 @@
--- dorn-common-commit: @COMMIT@
---[[ AUTO-GENERATED — synced from GAMMA-Common, commit @COMMIT@ ]]
+--[[
+	Dorn common loader for commit @COMMIT@.
+
+	Synced verbatim (only @COMMIT@ is substituted) alongside
+	dorn_mcm_@COMMIT@ / dorn_dbg_@COMMIT@ / dorn_sys_@COMMIT@ as
+	dorn_common_@COMMIT@.script. X-Ray auto-loads every .script file in
+	gamedata/scripts at boot, so this and its 3 siblings are already loaded
+	globals by the time any mod's on_game_start() runs — no process_file()
+	call needed (or safe: calling process_file() from a script that's
+	itself already being loaded throws "attempt to call global
+	'process_file' (a nil value)", which is what broke every mod under the
+	previous generated-entry-script design).
+
+	Usage from a mod's _main.script:
+
+		local MOD_ID = "dorn_prone_fix"
+		local COMMON = "dorn_common_@COMMIT@" -- bump via sync-dorn-common.sh
+
+		local DORN
+
+		function on_game_start()
+			DORN = _G[COMMON].load(MOD_ID)
+			-- ...
+		end
+
+	Resolve via _G[COMMON] and call load() inside on_game_start() only —
+	never at the top level of the script, since load order across
+	auto-loaded files isn't guaranteed there.
+]]
 
 local SUFFIX = "_@COMMIT@"
 
-process_file("dorn_mcm" .. SUFFIX)
-process_file("dorn_dbg" .. SUFFIX)
-process_file("dorn_sys" .. SUFFIX)
-
-local mcm = _G["dorn_mcm" .. SUFFIX]
-local dbg = _G["dorn_dbg" .. SUFFIX]
-local sys = _G["dorn_sys" .. SUFFIX]
-
-sys.set_deps(mcm, dbg)
-
-printf("[DORN] @MOD_ID@: common loaded (commit @COMMIT@)")
-
-function get()
-	return {
-		COMMIT = "@COMMIT@",
-		mcm = mcm,
-		dbg = dbg,
-		sys = sys,
-	}
-end
-
-function init(mod_id)
+function load(mod_id)
+	local mcm = _G["dorn_mcm" .. SUFFIX]
+	local dbg = _G["dorn_dbg" .. SUFFIX]
+	local sys = _G["dorn_sys" .. SUFFIX]
+	sys.set_deps(mcm, dbg)
 	if mod_id then
 		sys.reset_mod(mod_id)
 		dbg.clear_source(mod_id)
 	end
+	printf("[DORN] %s: common loaded (commit @COMMIT@)", tostring(mod_id))
+	return { mcm = mcm, dbg = dbg, sys = sys }
 end

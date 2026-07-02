@@ -1,6 +1,6 @@
 # GAMMA-Common (Dorns_Common)
 
-Source for Dorn shared scripts. Feature mods sync the three common scripts locally, generate a small per-mod entry script, and commit the result — no submodules, no separate MO2 mod, and no mirrored copy of this repo left lying around.
+Source for Dorn shared scripts. Feature mods sync the common scripts locally, as flat commit-suffixed files, and commit the result — no submodules, no separate MO2 mod, no mirrored copy of this repo left lying around.
 
 This repo is **not** an installable MO2 mod itself — it has no `meta.ini`, and nothing here ever gets zipped or installed directly. It only exists to be synced *from*, via git, into feature mods' own `gamedata/`.
 
@@ -12,35 +12,66 @@ There's no version number, no tags, no release CI. "Version" is just this repo's
 |------|------|
 | `dorn_mcm.script` | MCM getters (namespace module) |
 | `dorn_dbg.script` | Debug HUD (namespace module) |
-| `dorn_sys.script` | `ready()` gate (`set_deps` from `<mod_id>_common`) |
+| `dorn_sys.script` | `ready()` gate (`set_deps` wires it to `mcm`/`dbg`) |
+
+Plus `tools/dorn_common.template.script` — a tiny loader synced as a 4th
+file, `dorn_common_<hash>.script` (see "The loader" below).
+
+## The loader, and why it doesn't call `process_file()`
+
+Earlier versions of this synced a generated `<mod_id>_common.script` wrapper
+that called `process_file()` to load the three scripts above and exposed a
+`get()`/`init()` API. **That's gone — it doesn't work.**
+
+X-Ray's `process_file()` cannot safely be called from within a script that is
+itself already being loaded via `process_file()` — doing so throws
+`attempt to call global 'process_file' (a nil value)` at runtime, which
+silently broke every mod using that pattern. It's also unnecessary: X-Ray
+auto-loads *every* `.script` file under `gamedata/scripts` at boot,
+regardless of whether anything ever calls `process_file()` on it — that's
+exactly how the common scripts end up available at all, no `process_file()`
+call required anywhere.
+
+So instead there's `dorn_common_<hash>.script` — synced from
+`tools/dorn_common.template.script` (only the `@COMMIT@` placeholder gets
+substituted with the current commit hash) — which exposes one function,
+`load(mod_id)`, that resolves the three sibling globals, wires them together,
+and returns them as a table. A mod's `_main.script` just does:
+
+```lua
+DORN = _G[COMMON].load(MOD_ID)
+```
+
+instead of duplicating that lookup/wiring logic itself (see "Feature code"
+below). This is still just a plain auto-loaded global lookup, not a
+`process_file()` call, and it's still resolved inside `on_game_start()` —
+by the time any mod's `on_game_start()` runs, every `.script` file has
+already finished loading, so this is always safe regardless of alphabetical
+load order.
 
 ## Why mods never step on each other
 
 MO2 merges every enabled mod's `gamedata/` into one VFS. A file only collides
 if two mods ship the exact same relative path with different content.
 
-- **Entry script is unique per mod**: sync generates `<mod_id>_common.script`,
-  named from that mod's own `.mod_id`. Two mods can never produce the
-  same entry filename, so one mod's synced commit can never leak into
-  another — whether they're on the same or different commits.
-- **`dorn_mcm.script` / `dorn_dbg.script` / `dorn_sys.script` are copied as
-  flat files suffixed with the commit they came from**:
-  `dorn_mcm_<hash>.script`, etc. Different commits ⇒ different filename,
-  zero overlap. Same commit ⇒ same filename **and** byte-identical content,
-  so a VFS "collision" there is harmless — it doesn't matter which mod's
-  copy MO2 picks.
+`dorn_mcm.script` / `dorn_dbg.script` / `dorn_sys.script` / the generated
+`dorn_common.script` loader are all copied as flat files suffixed with the
+commit they came from: `dorn_mcm_<hash>.script`, etc. Different commits ⇒
+different filename, zero overlap. Same commit ⇒ same filename **and**
+byte-identical content, so a VFS "collision" there is harmless — it doesn't
+matter which mod's copy MO2 picks.
 
 Net effect: any mix of mods, any mix of commits, no cross-mod interference.
 
-**Why not a `common_<hash>/` subfolder** (the original design): X-Ray's
-`process_file()` uses the same string for both the file path *and* the Lua
-namespace it registers the module under, and its namespace-splitting code
-only understands `.` as a nesting separator, not `/`. A namespace like
+**Why not a `common_<hash>/` subfolder** (an earlier, also-broken design):
+X-Ray's `process_file()` uses the same string for both the file path *and*
+the Lua namespace it registers the module under, and its namespace-splitting
+code only understands `.` as a nesting separator, not `/`. A namespace like
 `"common_a9df1649/dorn_mcm"` has no dot, so the engine treats it as one flat
 (and invalid) Lua identifier when generating the assignment that registers
-the module — a straight syntax error, so the module silently never loads,
-`sys.set_deps(mcm, dbg)` throws, and every mod's `_common.script` fails to
-load. Flat, underscore-suffixed filenames sidestep this entirely.
+the module — a straight syntax error. Flat, underscore-suffixed filenames
+sidestep this entirely (and also sidestep the `process_file` bug above, since
+there's no wrapper script trying to load them in the first place).
 
 ## Mod ID
 
@@ -50,25 +81,31 @@ Each mod has a `.mod_id` file — one line, committed once, e.g.:
 dorn_prone_fix
 ```
 
+This isn't read by the sync script for naming anymore (there's no generated
+file to name) — it's the marker `sync-all-dorn-mods.sh` uses to auto-discover
+which sibling `Dorns_*` folders actually sync common code, and it documents
+the mod's `MOD_ID` constant for reference.
+
 This is **not** stored in `meta.ini`. MO2 owns `meta.ini` and rewrites it
-(and its existing `modid=` field is the Nexus mod ID, unrelated to this — 
+(and its existing `modid=` field is the Nexus mod ID, unrelated to this —
 repurposing it would be fragile and confusing). A dedicated file is explicit,
 never touched by MO2, and never changes once set.
 
 ## No local mirror
 
 Older versions of this setup cloned the whole `Dorns_Common` repo into each
-mod's `.dorn-common/` folder just to read 4 files. That's gone. The sync
+mod's `.dorn-common/` folder just to read 3 files. That's gone. The sync
 script now reads directly from:
 
 1. `../Dorns_Common` next to the mod, if present (typical dev setup) — it
-   must be a clean checkout (no uncommitted changes to the synced files), so
-   the commit hash it reports actually matches what gets copied, or
+   must be a clean checkout (no uncommitted changes to `gamedata/scripts`),
+   so the commit hash it reports actually matches what gets copied, or
 2. a throwaway `git clone --depth 1` into a temp directory, deleted the
    moment the script exits, if there's no local checkout.
 
 Nothing persists in the mod's repo folder beyond what actually gets
-committed (`gamedata/scripts/...`). Nothing to gitignore for it.
+committed (`gamedata/scripts/dorn_{mcm,dbg,sys,common}_<hash>.script`).
+Nothing to gitignore for it.
 
 ## One canonical copy of the tooling
 
@@ -99,19 +136,16 @@ definitions live in exactly one place.
 ```
 .mod_id                      # committed, one line, e.g. "dorn_prone_fix"
 gamedata/scripts/
-  dorn_prone_fix_common.script    # generated entry + commit pin + loader
+  dorn_prone_fix_main.script       # local COMMON = "dorn_common_a9f6380b"; DORN = _G[COMMON].load(MOD_ID)
+  dorn_common_a9f6380b.script      # generated loader — committed
   dorn_mcm_a9f6380b.script         # copied from Dorns_Common — committed
   dorn_dbg_a9f6380b.script
   dorn_sys_a9f6380b.script
 ```
 
-The synced commit is recorded on the first line of `<mod_id>_common.script` (used by `--check`, and to suffix the three copied script filenames):
-
-```lua
--- dorn-common-commit: a9f6380b
-```
-
-The entry script also `printf`s a one-line startup log (`[DORN] <mod_id>: common loaded (commit <hash>)`) so you can confirm which commit is actually loaded in-game, e.g. via the log console or `Dorns_FPS_Counter`'s log file.
+There's no file recording the synced commit — the commit is just the suffix
+on the four filenames. Run `--check` to confirm they're still in sync with
+`Dorns_Common`'s current state.
 
 ## Setup (once per mod)
 
@@ -124,19 +158,21 @@ Copy `githooks/pre-commit` from another Dorn mod as a starting point. Set up the
 
 ## Sync
 
-It's just two commands. Run sync, get Dorns_Common's current commit copied into a subdirectory named after it, done.
+It's just two commands. Run sync, get Dorns_Common's current commit copied in as four files suffixed with its hash, done.
 
 ```bash
 cd /path/to/the/mod   # or any subdirectory of it
 bash /path/to/Dorns_Common/tools/sync-dorn-common.sh              # get latest commit, done
-bash /path/to/Dorns_Common/tools/sync-dorn-common.sh --check      # verify only, no network
+bash /path/to/Dorns_Common/tools/sync-dorn-common.sh --check      # verify only, no changes
 ```
 
-There's no version number to look up or pass — sync always takes whatever commit `../Dorns_Common` (or the remote, if there's no local checkout) is currently on. If the local checkout has uncommitted changes to the synced files, sync refuses to run — commit them there first so the hash actually matches what gets copied.
+There's no version number to look up or pass — sync always takes whatever commit `../Dorns_Common` (or the remote, if there's no local checkout) is currently on. If the local checkout has uncommitted changes to `gamedata/scripts`, sync refuses to run — commit them there first so the hash actually matches what gets copied.
 
-Or from the editor: **Run Task** → `Dorn: Sync Common` / `Dorn: Check Common`. Have a file from the target mod open and focused first — the task runs with that file's directory as cwd, and the script walks up to find the mod's repo root (and its `.mod_id`) from there, same as it would from a terminal.
+After a sync that changes the commit hash, update the `COMMON` constant near the top of the mod's `_main.script` to match (the script prints a reminder), e.g. `local COMMON = "dorn_common_a9f6380b"`. That's the one line to bump — `DORN = _G[COMMON].load(MOD_ID)` derives everything else from it.
 
-To do every mod in one go, there's also **Run Task** → `Dorn: Sync All Mods` / `Dorn: Check All Mods`. These run `tools/sync-all-dorn-mods.sh`, which auto-discovers every sibling `Dorns_*` folder with a `.mod_id` file (skipping `Dorns_Common` itself and any not-yet-set-up mod) and syncs each in turn — nothing to list or maintain, adding a new mod just means giving it a `.mod_id` and it's automatically included next time.
+Or from the editor: **Run Task** → `Dorn: Sync Common` / `Dorn: Check Common`. Have a file from the target mod open and focused first — the task runs with that file's directory as cwd, and the script walks up to find the mod's repo root from there, same as it would from a terminal.
+
+To do every mod in one go, there's also **Run Task** → `Dorn: Sync All Mods` / `Dorn: Check All Mods`. These run `tools/sync-all-dorn-mods.sh`, which auto-discovers every sibling `Dorns_*` folder with a `.mod_id` file (skipping `Dorns_Common` itself and any not-yet-set-up mod) and syncs each in turn — nothing to list or maintain, adding a new mod just means giving it a `.mod_id` and it's automatically included next time. You'll still need to bump `COMMON` by hand in each mod that changed.
 
 These are defined once as **User tasks** (Command Palette → `Tasks: Open User Tasks`), not per-mod `.vscode/tasks.json`. They use a fixed absolute path to this repo's tools (`C:/GAMMA/mods/Dorns_Common/tools/...`) and `${fileDirname}` (the currently open file's folder) for cwd — deliberately **not** `${workspaceFolder}`. In a multi-root workspace `${workspaceFolder}` resolves to whichever folder Cursor considers "current" (not necessarily the mod you're looking at), which silently ran the sync against the wrong folder. `${fileDirname}` + the scripts' own git-root walk-up removes that ambiguity without needing a hardcoded mod list to maintain: open any file in the mod you want, run the task, done.
 
@@ -205,19 +241,32 @@ If you already have other User tasks defined, merge the `tasks`/`inputs` arrays 
 ## Feature code
 
 ```lua
-process_file("dorn_prone_fix_common")
-local DORN = dorn_prone_fix_common.get()
+local MOD_ID = "dorn_prone_fix"
+local COMMON = "dorn_common_a9f6380b" -- bump via sync-dorn-common.sh
+
+local DORN
 
 function on_game_start()
-  dorn_prone_fix_common.init(MOD_ID)  -- resets only this mod's state
-  -- ...
+	DORN = _G[COMMON].load(MOD_ID)   -- wires deps + calls sys.reset_mod/dbg.clear_source(MOD_ID)
+	-- ...
 end
 
 DORN.mcm.bool(MOD_ID, "main/foo", false)
 local ctx, actor = DORN.sys.ready(MOD_ID, db, on_option_change)
 ```
 
-`process_file`/`get`/`init` always reference `<mod_id>_common` — the mod's own `.mod_id` value. This is stable across syncs; it only ever changes if you rename the mod.
+`_G[COMMON].load(mod_id)` (defined in `tools/dorn_common.template.script`,
+synced as `dorn_common_<hash>.script`) resolves the three sibling globals,
+calls `sys.set_deps`, `sys.reset_mod(mod_id)`, and `dbg.clear_source(mod_id)`
+for you, and returns `{ mcm = ..., dbg = ..., sys = ... }`.
+
+Resolve `DORN` inside `on_game_start()`, never at the top level of the
+script — by the time `on_game_start()` runs, every `.script` file has
+already been auto-loaded by the engine, so `_G[COMMON]` and the three
+globals it looks up are all guaranteed to exist. At the top level (i.e.
+while the file itself is still being parsed), that's not guaranteed — other
+scripts load in whatever order the engine's file scan produces, not
+necessarily before yours.
 
 ## Hooks
 
@@ -230,8 +279,9 @@ git config core.hooksPath githooks
 ## Bump common (per mod, independently)
 
 1. Edit scripts here and commit (committing here *is* publishing — no push/tag/CI step needed for other mods to pick it up, though push it too so the remote-clone fallback stays current)
-2. In that mod: run sync (see above)
-3. `git add gamedata/scripts` and commit
-4. Push — that mod's own release CI zips its committed `gamedata/` as-is
+2. In that mod: run sync (see above) — this rewrites `dorn_{mcm,dbg,sys,common}_<hash>.script` under the new commit hash
+3. Update `COMMON` in that mod's `_main.script` to the new hash, e.g. `"dorn_common_<hash>"`
+4. `git add gamedata/scripts` and commit
+5. Push — that mod's own release CI zips its committed `gamedata/` as-is
 
-Other mods are unaffected until you repeat step 2–4 in them — each mod updates on its own schedule, at its own pace.
+Other mods are unaffected until you repeat steps 2–5 in them — each mod updates on its own schedule, at its own pace.
