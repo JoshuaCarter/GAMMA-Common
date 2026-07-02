@@ -23,6 +23,12 @@
 # (a nil value)" — this is what broke every mod under the previous
 # generated-entry-script design.
 #
+# Sync also rewrites the commit baked into any *.script file's
+#   local DORN_COMMON_VERSION = "dorn_common_<commit>"
+# line, in place, to match — so there's no manual "now go bump this constant"
+# step to forget. --check fails if that constant is stale, same as it does
+# for the copied files themselves.
+#
 # This naming keeps mods fully independent in MO2's merged VFS:
 # dorn_*_<commit>.script only overlaps between mods synced from the exact
 # same commit, where the content is byte-identical anyway. (Files must stay
@@ -110,6 +116,9 @@ expected_loader() {
 	sed "s/@COMMIT@/$COMMIT/g" "$TEMPLATE" > "$1"
 }
 
+# Matches (with any leading whitespace, e.g. tabs): local DORN_COMMON_VERSION = "dorn_common_<hex>"
+VERSION_RE='DORN_COMMON_VERSION[[:space:]]*=[[:space:]]*"dorn_common_[0-9a-f]+"'
+
 verify_install() {
 	local src_scripts="$SRC/gamedata/scripts"
 	for name in dorn_mcm dorn_dbg dorn_sys; do
@@ -124,6 +133,11 @@ verify_install() {
 		return 1
 	fi
 	rm -f "$tmp"
+
+	while IFS= read -r -d '' f; do
+		grep -Eq "$VERSION_RE" "$f" || continue
+		grep -Eq "\"dorn_common_${COMMIT}\"" "$f" || return 1
+	done < <(find "$SCRIPTS" -type f -name '*.script' -print0)
 	return 0
 }
 
@@ -133,7 +147,6 @@ if [[ "$CHECK_ONLY" == "1" ]]; then
 		exit 0
 	fi
 	echo "sync-dorn-common: out of date — run: bash <path>/sync-dorn-common.sh" >&2
-	echo "  then update the commit suffix in this mod's _main.script" >&2
 	exit 1
 fi
 
@@ -182,8 +195,18 @@ else
 	rm -f "$LOADER_TMP"
 fi
 
+# Rewrite the commit baked into any *.script file's DORN_COMMON_VERSION
+# constant, in place, so there's no manual edit to remember.
+while IFS= read -r -d '' f; do
+	grep -Eq "$VERSION_RE" "$f" || continue
+	grep -Eq "\"dorn_common_${COMMIT}\"" "$f" && continue
+	sed -i -E "s/${VERSION_RE}/DORN_COMMON_VERSION = \"dorn_common_${COMMIT}\"/" "$f"
+	UPDATED=1
+	echo "sync-dorn-common: bumped DORN_COMMON_VERSION -> dorn_common_${COMMIT} in ${f#"$ROOT"/}"
+done < <(find "$SCRIPTS" -type f -name '*.script' -print0)
+
 echo "sync-dorn-common: ${COMMIT} (source: ${SRC})"
 if [[ "$UPDATED" == "1" ]]; then
-	echo "sync-dorn-common: updated — git add gamedata/scripts, then set COMMON = \"dorn_common_${COMMIT}\" in this mod's _main.script"
+	echo "sync-dorn-common: updated — git add gamedata/scripts"
 fi
 exit 0
