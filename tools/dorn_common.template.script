@@ -1,28 +1,23 @@
 -- dorn-common-commit: @COMMIT@
---[[ AUTO-GENERATED — synced from GAMMA-Common (@COMMON_DIR@) ]]
+--[[ AUTO-GENERATED — synced from GAMMA-Common, commit @COMMIT@ ]]
 
-local COMMON_DIR = "@COMMON_DIR@"
+local SUFFIX = "_@COMMIT@"
 
-process_file(COMMON_DIR .. "/dorn_mcm")
-process_file(COMMON_DIR .. "/dorn_dbg")
-process_file(COMMON_DIR .. "/dorn_sys")
+process_file("dorn_mcm" .. SUFFIX)
+process_file("dorn_dbg" .. SUFFIX)
+process_file("dorn_sys" .. SUFFIX)
 
-local mcm = _G[COMMON_DIR .. "/dorn_mcm"]
-local dbg = _G[COMMON_DIR .. "/dorn_dbg"]
-local sys = _G[COMMON_DIR .. "/dorn_sys"]
+local mcm = _G["dorn_mcm" .. SUFFIX]
+local dbg = _G["dorn_dbg" .. SUFFIX]
+local sys = _G["dorn_sys" .. SUFFIX]
 
 sys.set_deps(mcm, dbg)
 
-printf("[DORN] @MOD_ID@: common loaded (%s, commit @COMMIT@)", COMMON_DIR)
-
-function path()
-	return COMMON_DIR
-end
+printf("[DORN] @MOD_ID@: common loaded (commit @COMMIT@)")
 
 function get()
 	return {
 		COMMIT = "@COMMIT@",
-		COMMON_DIR = COMMON_DIR,
 		mcm = mcm,
 		dbg = dbg,
 		sys = sys,

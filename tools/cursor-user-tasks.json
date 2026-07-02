@@ -18,6 +18,22 @@
 			"options": { "cwd": "${fileDirname}" },
 			"problemMatcher": [],
 			"presentation": { "reveal": "always", "panel": "shared" }
+		},
+		{
+			"label": "Dorn: Sync All Mods",
+			"type": "shell",
+			"command": "bash",
+			"args": ["C:/GAMMA/mods/Dorns_Common/tools/sync-all-dorn-mods.sh"],
+			"problemMatcher": [],
+			"presentation": { "reveal": "always", "panel": "shared" }
+		},
+		{
+			"label": "Dorn: Check All Mods",
+			"type": "shell",
+			"command": "bash",
+			"args": ["C:/GAMMA/mods/Dorns_Common/tools/sync-all-dorn-mods.sh", "--check"],
+			"problemMatcher": [],
+			"presentation": { "reveal": "always", "panel": "shared" }
 		}
 	]
 }

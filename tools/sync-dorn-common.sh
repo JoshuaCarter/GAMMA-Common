@@ -7,18 +7,27 @@
 #   cd /path/to/Dorns_Prone_Fix/gamedata/scripts   # any subdirectory works
 #   bash /path/to/Dorns_Common/tools/sync-dorn-common.sh [--check]
 #
-# Sync = copy Dorns_Common's current commit into a subdirectory named after
-# that commit. That's it, no version numbers, no tags, no CI:
-#   gamedata/scripts/<mod_id>_common.script     # generated entry, records the commit
-#   gamedata/scripts/common_<commit>/{dorn_mcm,dorn_dbg,dorn_sys}.script
+# Sync = copy Dorns_Common's current commit into gamedata/scripts as flat
+# files suffixed with that commit's hash. That's it, no version numbers, no
+# tags, no CI:
+#   gamedata/scripts/<mod_id>_common.script           # generated entry, records the commit
+#   gamedata/scripts/dorn_{mcm,dbg,sys}_<commit>.script
 #
 # <mod_id> comes from the target mod's .mod_id (one line, set once at the
 # repo root): echo dorn_prone_fix > .mod_id
 #
 # This naming keeps mods fully independent in MO2's merged VFS: the entry
-# script name is unique per mod, and common_<commit>/ only overlaps between
-# mods synced from the exact same commit, where the content is byte-identical
-# anyway.
+# script name is unique per mod, and dorn_*_<commit>.script only overlaps
+# between mods synced from the exact same commit, where the content is
+# byte-identical anyway.
+#
+# IMPORTANT: these must stay flat files, not a subdirectory. X-Ray's
+# process_file() uses the same string for both the file path AND the Lua
+# namespace it registers the module under, and its namespace wrapper only
+# understands "." as a nesting separator — a "/" in that string produces
+# invalid Lua source (e.g. `common_x/dorn_mcm= this`) and silently breaks
+# every mod that loads it. Flat, underscore-suffixed filenames avoid this
+# entirely.
 #
 # Source (no local mirror is ever kept):
 #   1. ../Dorns_Common next to the mod, if present — must be a clean git
@@ -114,21 +123,20 @@ else
 	COMMIT="$(git -C "$SRC" rev-parse --short=8 HEAD)"
 fi
 
-DIR="common_${COMMIT}"
-DEST="$SCRIPTS/$DIR"
+dest_file() { echo "$SCRIPTS/${1}_${COMMIT}.script"; }
 TEMPLATE=""
 [[ -n "$SRC" ]] && TEMPLATE="$SRC/tools/dorn_common.template.script"
 
 expected_entry() {
 	local tmp="$1"
 	[[ -f "$TEMPLATE" ]] || return 1
-	sed -e "s/@COMMON_DIR@/$DIR/g" -e "s/@COMMIT@/$COMMIT/g" -e "s/@MOD_ID@/$MOD_ID/g" "$TEMPLATE" > "$tmp"
+	sed -e "s/@COMMIT@/$COMMIT/g" -e "s/@MOD_ID@/$MOD_ID/g" "$TEMPLATE" > "$tmp"
 }
 
 verify_install() {
-	[[ -f "$DEST/dorn_mcm.script" ]] || return 1
-	[[ -f "$DEST/dorn_dbg.script" ]] || return 1
-	[[ -f "$DEST/dorn_sys.script" ]] || return 1
+	[[ -f "$(dest_file dorn_mcm)" ]] || return 1
+	[[ -f "$(dest_file dorn_dbg)" ]] || return 1
+	[[ -f "$(dest_file dorn_sys)" ]] || return 1
 	[[ -f "$ENTRY" ]] || return 1
 
 	if [[ -z "$SRC" || ! -f "$TEMPLATE" ]]; then
@@ -142,15 +150,15 @@ verify_install() {
 	rm -f "$entry_tmp"
 
 	local src_scripts="$SRC/gamedata/scripts"
-	cmp -s "$src_scripts/dorn_mcm.script" "$DEST/dorn_mcm.script" || return 1
-	cmp -s "$src_scripts/dorn_dbg.script" "$DEST/dorn_dbg.script" || return 1
-	cmp -s "$src_scripts/dorn_sys.script" "$DEST/dorn_sys.script" || return 1
+	cmp -s "$src_scripts/dorn_mcm.script" "$(dest_file dorn_mcm)" || return 1
+	cmp -s "$src_scripts/dorn_dbg.script" "$(dest_file dorn_dbg)" || return 1
+	cmp -s "$src_scripts/dorn_sys.script" "$(dest_file dorn_sys)" || return 1
 	return 0
 }
 
 if [[ "$CHECK_ONLY" == "1" ]]; then
 	if verify_install; then
-		echo "sync-dorn-common: ok (${MOD_ID}: ${DIR})"
+		echo "sync-dorn-common: ok (${MOD_ID}: ${COMMIT})"
 		exit 0
 	fi
 	echo "sync-dorn-common: out of date — run: bash <path>/sync-dorn-common.sh" >&2
@@ -162,17 +170,25 @@ fi
 UPDATED=0
 
 mkdir -p "$SCRIPTS"
-while IFS= read -r old; do
-	if [[ -n "$old" && "$old" != "$DEST" ]]; then
-		rm -rf "$old"
-		UPDATED=1
-	fi
-done < <(find "$SCRIPTS" -maxdepth 1 -type d -name 'common_*' 2>/dev/null || true)
 
-mkdir -p "$DEST"
+# Migration: drop the old common_<hash>/ subdirectory layout (broke module
+# loading — see note at the top of this file) and any stale flat
+# dorn_*_<hash>.script files from a previous commit.
+while IFS= read -r old; do
+	[[ -n "$old" ]] && { rm -rf "$old"; UPDATED=1; }
+done < <(find "$SCRIPTS" -maxdepth 1 -type d -name 'common_*' 2>/dev/null || true)
+for name in dorn_mcm dorn_dbg dorn_sys; do
+	while IFS= read -r old; do
+		if [[ -n "$old" && "$old" != "$(dest_file "$name")" ]]; then
+			rm -f "$old"
+			UPDATED=1
+		fi
+	done < <(find "$SCRIPTS" -maxdepth 1 -type f -name "${name}_*.script" 2>/dev/null || true)
+done
+
 for name in dorn_mcm dorn_dbg dorn_sys; do
 	src="$SRC/gamedata/scripts/${name}.script"
-	dst="$DEST/${name}.script"
+	dst="$(dest_file "$name")"
 	if [[ ! -f "$dst" ]] || ! cmp -s "$src" "$dst"; then
 		cp "$src" "$dst"
 		UPDATED=1
@@ -188,7 +204,7 @@ else
 	rm -f "$ENTRY_TMP"
 fi
 
-echo "sync-dorn-common: ${MOD_ID}: ${DIR} (source: ${SRC})"
+echo "sync-dorn-common: ${MOD_ID}: ${COMMIT} (source: ${SRC})"
 if [[ "$UPDATED" == "1" ]]; then
 	echo "sync-dorn-common: updated — git add gamedata/scripts"
 fi

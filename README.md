@@ -4,7 +4,7 @@ Source for Dorn shared scripts. Feature mods sync the three common scripts local
 
 This repo is **not** an installable MO2 mod itself — it has no `meta.ini`, and nothing here ever gets zipped or installed directly. It only exists to be synced *from*, via git, into feature mods' own `gamedata/`.
 
-There's no version number, no tags, no release CI. "Version" is just this repo's current git commit — sync copies its current commit into a subdirectory named after that commit's short hash. Committing here *is* publishing.
+There's no version number, no tags, no release CI. "Version" is just this repo's current git commit — sync copies its current commit into flat, hash-suffixed script files. Committing here *is* publishing.
 
 ## Source scripts (`gamedata/scripts/`)
 
@@ -23,13 +23,24 @@ if two mods ship the exact same relative path with different content.
   named from that mod's own `.mod_id`. Two mods can never produce the
   same entry filename, so one mod's synced commit can never leak into
   another — whether they're on the same or different commits.
-- **`dorn_mcm.script` / `dorn_dbg.script` / `dorn_sys.script` live under a
-  folder named after the commit they came from**: `common_<hash>/`.
-  Different commits ⇒ different folder, zero overlap. Same commit ⇒ same
-  folder path **and** byte-identical content, so a VFS "collision" there is
-  harmless — it doesn't matter which mod's copy MO2 picks.
+- **`dorn_mcm.script` / `dorn_dbg.script` / `dorn_sys.script` are copied as
+  flat files suffixed with the commit they came from**:
+  `dorn_mcm_<hash>.script`, etc. Different commits ⇒ different filename,
+  zero overlap. Same commit ⇒ same filename **and** byte-identical content,
+  so a VFS "collision" there is harmless — it doesn't matter which mod's
+  copy MO2 picks.
 
 Net effect: any mix of mods, any mix of commits, no cross-mod interference.
+
+**Why not a `common_<hash>/` subfolder** (the original design): X-Ray's
+`process_file()` uses the same string for both the file path *and* the Lua
+namespace it registers the module under, and its namespace-splitting code
+only understands `.` as a nesting separator, not `/`. A namespace like
+`"common_a9df1649/dorn_mcm"` has no dot, so the engine treats it as one flat
+(and invalid) Lua identifier when generating the assignment that registers
+the module — a straight syntax error, so the module silently never loads,
+`sys.set_deps(mcm, dbg)` throws, and every mod's `_common.script` fails to
+load. Flat, underscore-suffixed filenames sidestep this entirely.
 
 ## Mod ID
 
@@ -89,19 +100,18 @@ definitions live in exactly one place.
 .mod_id                      # committed, one line, e.g. "dorn_prone_fix"
 gamedata/scripts/
   dorn_prone_fix_common.script    # generated entry + commit pin + loader
-  common_a9f6380b/                 # copied from Dorns_Common — committed
-    dorn_mcm.script
-    dorn_dbg.script
-    dorn_sys.script
+  dorn_mcm_a9f6380b.script         # copied from Dorns_Common — committed
+  dorn_dbg_a9f6380b.script
+  dorn_sys_a9f6380b.script
 ```
 
-The synced commit is recorded on the first line of `<mod_id>_common.script` (used by `--check`, and to name the `common_<hash>/` folder):
+The synced commit is recorded on the first line of `<mod_id>_common.script` (used by `--check`, and to suffix the three copied script filenames):
 
 ```lua
 -- dorn-common-commit: a9f6380b
 ```
 
-The entry script also `printf`s a one-line startup log (`[DORN] <mod_id>: common loaded (common_<hash>, commit <hash>)`) so you can confirm which commit is actually loaded in-game, e.g. via the log console or `Dorns_FPS_Counter`'s log file.
+The entry script also `printf`s a one-line startup log (`[DORN] <mod_id>: common loaded (commit <hash>)`) so you can confirm which commit is actually loaded in-game, e.g. via the log console or `Dorns_FPS_Counter`'s log file.
 
 ## Setup (once per mod)
 
@@ -126,6 +136,8 @@ There's no version number to look up or pass — sync always takes whatever comm
 
 Or from the editor: **Run Task** → `Dorn: Sync Common` / `Dorn: Check Common`. Have a file from the target mod open and focused first — the task runs with that file's directory as cwd, and the script walks up to find the mod's repo root (and its `.mod_id`) from there, same as it would from a terminal.
 
+To do every mod in one go, there's also **Run Task** → `Dorn: Sync All Mods` / `Dorn: Check All Mods`. These run `tools/sync-all-dorn-mods.sh`, which auto-discovers every sibling `Dorns_*` folder with a `.mod_id` file (skipping `Dorns_Common` itself and any not-yet-set-up mod) and syncs each in turn — nothing to list or maintain, adding a new mod just means giving it a `.mod_id` and it's automatically included next time.
+
 These are defined once as **User tasks** (Command Palette → `Tasks: Open User Tasks`), not per-mod `.vscode/tasks.json`. They use a fixed absolute path to this repo's tools (`C:/GAMMA/mods/Dorns_Common/tools/...`) and `${fileDirname}` (the currently open file's folder) for cwd — deliberately **not** `${workspaceFolder}`. In a multi-root workspace `${workspaceFolder}` resolves to whichever folder Cursor considers "current" (not necessarily the mod you're looking at), which silently ran the sync against the wrong folder. `${fileDirname}` + the scripts' own git-root walk-up removes that ambiguity without needing a hardcoded mod list to maintain: open any file in the mod you want, run the task, done.
 
 Windows location: `%APPDATA%\Cursor\User\tasks.json`. Contents:
@@ -149,6 +161,22 @@ Windows location: `%APPDATA%\Cursor\User\tasks.json`. Contents:
 			"command": "bash",
 			"args": ["C:/GAMMA/mods/Dorns_Common/tools/sync-dorn-common.sh", "--check"],
 			"options": { "cwd": "${fileDirname}" },
+			"problemMatcher": [],
+			"presentation": { "reveal": "always", "panel": "shared" }
+		},
+		{
+			"label": "Dorn: Sync All Mods",
+			"type": "shell",
+			"command": "bash",
+			"args": ["C:/GAMMA/mods/Dorns_Common/tools/sync-all-dorn-mods.sh"],
+			"problemMatcher": [],
+			"presentation": { "reveal": "always", "panel": "shared" }
+		},
+		{
+			"label": "Dorn: Check All Mods",
+			"type": "shell",
+			"command": "bash",
+			"args": ["C:/GAMMA/mods/Dorns_Common/tools/sync-all-dorn-mods.sh", "--check"],
 			"problemMatcher": [],
 			"presentation": { "reveal": "always", "panel": "shared" }
 		}
