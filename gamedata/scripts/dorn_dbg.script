@@ -3,13 +3,13 @@
 
 	Loaded via dorn_common_<hash>; use DORN.dbg from DORN_COMMON_VERSION.load().
 
-	show(source, slot, msg, tag_or_color) — on-screen HUD slots (colored).
-	log(msg)                              — plain printf to the game log file only.
+	overlay(source, slot, msg, tag_or_color) — on-screen HUD slots (colored).
+	log(mod_id, msg)                         — plain printf to the game log file only.
 
 	source is the mod id (e.g. "dorn_bleed_fix"). slot is an order number or
 	{ order, color } table. tag is optional and becomes "[tag] " before msg.
 
-	set_enabled(source, state) gates show for that source.
+	set_enabled(source, state) gates the overlay for that source.
 ]]
 
 local HUD_STATIC = "debug_info"
@@ -97,7 +97,7 @@ local function parse_slot(slot, msg, fourth)
 	return order, slot_color, text
 end
 
-local function any_screen_content()
+local function any_overlay_content()
 	for _, s in pairs(sources) do
 		if s.enabled and next(s.slots) then
 			return true
@@ -119,7 +119,7 @@ local function get_static()
 	return cs
 end
 
-local function clear_screen()
+local function clear_overlay()
 	local hud = get_hud()
 	if not hud then
 		return
@@ -130,8 +130,8 @@ local function clear_screen()
 end
 
 local function render()
-	if not any_screen_content() then
-		clear_screen()
+	if not any_overlay_content() then
+		clear_overlay()
 		return
 	end
 
@@ -204,7 +204,7 @@ function set_enabled(source, state)
 	render()
 end
 
-function show(source, slot, msg, tag_or_color)
+function overlay(source, slot, msg, tag_or_color)
 	local s = get_source(source)
 	if not s.enabled then
 		return
@@ -232,7 +232,7 @@ end
 
 function clear()
 	sources = {}
-	clear_screen()
+	clear_overlay()
 end
 
 getfenv().COLORS = COLORS
