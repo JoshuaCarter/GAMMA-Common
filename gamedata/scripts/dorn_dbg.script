@@ -1,12 +1,20 @@
 --[[
-	Dorn game log — fixed-slot on-screen debug readout (namespace module, no globals).
+	Dorn debug helpers (namespace module, no globals).
 
-	Loaded via <mod_id>_common; use DORN.dbg from <mod_id>_common.get().
+	Loaded via dorn_common_<hash>; use DORN.dbg from DORN_COMMON_VERSION.load().
+
+	show(source, slot, msg, tag_or_color) — on-screen HUD slots (colored).
+	log(msg)                              — plain printf to the game log file only.
+
+	source is the mod id (e.g. "dorn_bleed_fix"). slot is an order number or
+	{ order, color } table. tag is optional and becomes "[tag] " before msg.
+
+	set_enabled(source, state) gates show for that source.
 ]]
 
 local HUD_STATIC = "debug_info"
 local ORIGIN_X = 10
-local ORIGIN_Y = 10
+local ORIGIN_Y = 100
 
 local COLORS = {
 	white       = "%c[255,255,255,255]",
@@ -68,9 +76,30 @@ local function get_source(source)
 	return sources[source]
 end
 
-local function any_enabled()
+local function format_tag_prefix(tag)
+	if tag and tag ~= "" then
+		return "[" .. tag .. "] "
+	end
+	return ""
+end
+
+local function parse_slot(slot, msg, fourth)
+	local order, slot_color, text
+	if type(slot) == "table" then
+		order = slot.order or 0
+		slot_color = slot.color
+		text = format_tag_prefix(fourth) .. tostring(msg)
+	else
+		order = slot or 0
+		slot_color = fourth
+		text = tostring(msg)
+	end
+	return order, slot_color, text
+end
+
+local function any_screen_content()
 	for _, s in pairs(sources) do
-		if s.enabled then
+		if s.enabled and next(s.slots) then
 			return true
 		end
 	end
@@ -101,7 +130,7 @@ local function clear_screen()
 end
 
 local function render()
-	if not any_enabled() then
+	if not any_screen_content() then
 		clear_screen()
 		return
 	end
@@ -118,7 +147,7 @@ local function render()
 
 	local names = {}
 	for name, s in pairs(sources) do
-		if s.enabled then
+		if s.enabled and next(s.slots) then
 			names[#names + 1] = name
 		end
 	end
@@ -175,32 +204,18 @@ function set_enabled(source, state)
 	render()
 end
 
-function write(source, order, msg, color)
+function show(source, slot, msg, tag_or_color)
 	local s = get_source(source)
 	if not s.enabled then
 		return
 	end
-	if order == nil then
-		order = 0
-	end
-	s.slots[order] = { msg = tostring(msg), color = color }
+	local order, slot_color, text = parse_slot(slot, msg, tag_or_color)
+	s.slots[order] = { msg = text, color = slot_color }
 	render()
 end
 
-function log(source, slot, msg, tag)
-	local s = get_source(source)
-	if not s.enabled then
-		return
-	end
-	local order, slot_color
-	if type(slot) == "table" then
-		order = slot.order or 0
-		slot_color = slot.color
-	else
-		order = slot or 0
-	end
-	local prefix = tag and ("[" .. tag .. "] ") or ""
-	write(source, order, prefix .. tostring(msg), slot_color)
+function log(mod_id, msg)
+	printf("[DBG][%s] %s", tostring(mod_id), tostring(msg))
 end
 
 function clear_source(source)
