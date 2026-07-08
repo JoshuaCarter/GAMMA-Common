@@ -25,7 +25,8 @@ function set(mod_id, key, value)
 end
 
 function bool(mod_id, key, default)
-	return get(mod_id, key, default) == true
+	local value = get(mod_id, key, default)
+	return value == true or value == 1
 end
 
 function number(mod_id, key, default)
