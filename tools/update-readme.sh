@@ -50,3 +50,8 @@ done
 } >> "$tmp"
 
 mv "$tmp" "$README"
+
+NORMALIZE="${DORN_COMMON_LOCAL:-${MODS_ROOT:-C:/GAMMA/mods}/Dorns_Common}/tools/normalize-text-file.sh"
+if [[ -x "$NORMALIZE" ]]; then
+  bash "$NORMALIZE" "$README"
+fi

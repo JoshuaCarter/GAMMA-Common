@@ -54,6 +54,7 @@ SYNC_PATHS=(
 	gamedata/textures/dorn_mcm_banner.dds
 	tools/dorn_common.template.script
 	tools/patch-dorn-mcm-banner.sh
+	tools/normalize-text-file.sh
 	tools/update-readme.sh
 	tools/githooks/pre-commit
 	tools/mod/.editorconfig
@@ -116,6 +117,37 @@ expected_mcm() {
 
 VERSION_RE='DORN_COMMON_VERSION[[:space:]]*=[[:space:]]*"dorn_common_[0-9a-f]+"'
 
+NORMALIZE="$SRC/tools/normalize-text-file.sh"
+[[ -x "$NORMALIZE" ]] || NORMALIZE=""
+
+text_files_equal() {
+	local src_path="$1" dest_path="$2"
+	local tmp_src tmp_dest rc
+	[[ -f "$dest_path" ]] || return 1
+	if [[ -z "$NORMALIZE" ]]; then
+		cmp -s "$src_path" "$dest_path"
+		return
+	fi
+	tmp_src="$(mktemp)"
+	tmp_dest="$(mktemp)"
+	bash "$NORMALIZE" "$src_path" "$tmp_src"
+	bash "$NORMALIZE" "$dest_path" "$tmp_dest"
+	cmp -s "$tmp_src" "$tmp_dest"
+	rc=$?
+	rm -f "$tmp_src" "$tmp_dest"
+	return "$rc"
+}
+
+copy_text_file() {
+	local src_path="$1" dest_path="$2"
+	mkdir -p "$(dirname "$dest_path")"
+	if [[ -n "$NORMALIZE" ]]; then
+		bash "$NORMALIZE" "$src_path" "$dest_path"
+	else
+		cp "$src_path" "$dest_path"
+	fi
+}
+
 verify_readme() {
 	local script="$SRC/tools/update-readme.sh"
 	[[ -f "$script" && -f "$ROOT/README.md" && -f "$ROOT/meta.ini" ]] || return 0
@@ -153,9 +185,8 @@ sync_universal() {
 		src_path="$SRC/$src_rel"
 		dest_path="$ROOT/$dest_rel"
 		[[ -f "$src_path" ]] || { echo "sync-dorn-common: missing ${src_path}" >&2; return 1; }
-		mkdir -p "$(dirname "$dest_path")"
-		if [[ ! -f "$dest_path" ]] || ! cmp -s "$src_path" "$dest_path"; then
-			cp "$src_path" "$dest_path"
+		if [[ ! -f "$dest_path" ]] || ! text_files_equal "$src_path" "$dest_path"; then
+			copy_text_file "$src_path" "$dest_path"
 			return 2
 		fi
 	done
@@ -169,7 +200,7 @@ verify_universal() {
 		dest_rel="${pair#*:}"
 		src_path="$SRC/$src_rel"
 		dest_path="$ROOT/$dest_rel"
-		cmp -s "$src_path" "$dest_path" || return 1
+		text_files_equal "$src_path" "$dest_path" || return 1
 	done
 	return 0
 }
@@ -294,8 +325,8 @@ fi
 
 HOOK_SRC="$SRC/tools/githooks/pre-commit"
 HOOK_DST="$GITHOOKS/pre-commit"
-if [[ ! -f "$HOOK_DST" ]] || ! cmp -s "$HOOK_SRC" "$HOOK_DST"; then
-	cp "$HOOK_SRC" "$HOOK_DST"
+if [[ ! -f "$HOOK_DST" ]] || ! text_files_equal "$HOOK_SRC" "$HOOK_DST"; then
+	copy_text_file "$HOOK_SRC" "$HOOK_DST"
 	chmod +x "$HOOK_DST"
 	UPDATED=1
 fi
