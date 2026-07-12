@@ -281,6 +281,13 @@ while IFS= read -r -d '' f; do
 	echo "sync-dorn-common: bumped DORN_COMMON_VERSION -> dorn_common_${COMMIT} in ${f#"$ROOT"/}"
 done < <(find "$SCRIPTS" -type f -name '*.script' -print0)
 
+PATCH_SCRIPT="$SRC/tools/patch-dorn-mcm-banner.sh"
+if [[ -x "$PATCH_SCRIPT" ]]; then
+	if "$PATCH_SCRIPT" "$ROOT" "$COMMIT"; then
+		UPDATED=1
+	fi
+fi
+
 echo "sync-dorn-common: ${COMMIT} (source: ${SRC})"
 if [[ "$UPDATED" == "1" ]]; then
 	echo "sync-dorn-common: updated — git add .editorconfig .gitattributes .gitignore .github/workflows/release.yml .vscode gamedata/scripts gamedata/textures githooks/pre-commit"
