@@ -2,54 +2,16 @@
 # Canonical copy — lives only in Dorns_Common/tools. Feature mods invoke it
 # via a relative path; they do NOT keep their own copy.
 #
-# Run from anywhere inside the TARGET mod's repo — like git, it walks up from
-# the current directory to find the repo root:
-#   cd /path/to/Dorns_Prone_Fix/gamedata/scripts   # any subdirectory works
+# Run from anywhere inside the TARGET mod's repo:
 #   bash /path/to/Dorns_Common/tools/sync-dorn-common.sh [--check]
 #
-# Sync = copy Dorns_Common's scripts into the mod's gamedata/scripts as flat
-# files suffixed with Dorns_Common's current commit hash. That's it, no
-# version numbers, no tags, no CI:
-#   gamedata/scripts/dorn_{mcm,dbg,sys}_<commit>.script     # copied verbatim
-#   gamedata/scripts/dorn_common_<commit>.script            # tiny loader, only @COMMIT@ substituted
-#
-# The mod's _main.script references dorn_common_<commit> directly (see
-# README "Feature code") and calls its load(mod_id) — no per-mod generated
-# entry script, no process_file() call. X-Ray auto-loads every .script file
-# in gamedata/scripts at boot regardless of who references it, which is both
-# why this works without process_file() AND why process_file() must never be
-# called on any of these 4 files: calling it from within a script that is
-# itself already being loaded throws "attempt to call global 'process_file'
-# (a nil value)" — this is what broke every mod under the previous
-# generated-entry-script design.
-#
-# Sync also rewrites the commit baked into any *.script file's
-#   local DORN_COMMON_VERSION = "dorn_common_<commit>"
-# line, in place, to match — so there's no manual "now go bump this constant"
-# step to forget. --check fails if that constant is stale, same as it does
-# for the copied files themselves.
-#
-# This naming keeps mods fully independent in MO2's merged VFS:
-# dorn_*_<commit>.script only overlaps between mods synced from the exact
-# same commit, where the content is byte-identical anyway. (Files must stay
-# flat, not nested in a subdirectory — X-Ray's namespace wrapper only
-# understands "." as a nesting separator, and a "/" in the namespace name
-# produces invalid Lua source.)
-#
-# Source (no local mirror is ever kept):
-#   1. ../Dorns_Common next to the mod, if present — must be a clean git
-#      checkout (no uncommitted changes to the files being synced), so the
-#      commit hash actually matches what gets copied.
-#   2. otherwise a throwaway `git clone --depth 1` of the default branch into
-#      a temp directory, deleted when the script exits.
-#
-# --check verifies gamedata/scripts already has what a real sync would
-# produce (same commit, same content) — no changes made. Used by the
-# pre-commit hook.
-#
-# Env:
-#   DORN_COMMON_LOCAL  — path to a Dorns_Common checkout (default: ../Dorns_Common, relative to cwd)
-#   DORN_COMMON_REPO   — git URL used when local checkout is missing
+# Synced assets (commit-suffixed where noted for MO2 VFS independence):
+#   gamedata/scripts/dorn_{mcm,dbg,sys,common}_<commit>.script
+#   gamedata/textures/dorn_mcm_banner_<commit>.dds
+#   githooks/pre-commit
+#   .editorconfig, .gitattributes, .gitignore
+#   .github/workflows/release.yml
+#   .vscode/settings.json
 set -euo pipefail
 
 ROOT="$(git rev-parse --show-toplevel 2>/dev/null || true)"
@@ -69,20 +31,43 @@ for arg in "$@"; do
 	esac
 done
 
-# .mod_id is not used for naming anymore (no generated entry script), but it
-# stays required as the "this mod syncs common code" marker — it's what lets
-# sync-all-dorn-mods.sh auto-discover which mods to touch.
 MOD_ID_FILE="$ROOT/.mod_id"
 if [[ ! -f "$MOD_ID_FILE" ]]; then
 	echo "sync-dorn-common: missing ${MOD_ID_FILE}" >&2
-	echo "  Create it once with this mod's MOD_ID, e.g.:" >&2
-	echo "    echo dorn_prone_fix > .mod_id" >&2
 	exit 1
 fi
 
 SCRIPTS="$ROOT/gamedata/scripts"
+TEXTURES="$ROOT/gamedata/textures"
+TEXT_ENG="$ROOT/gamedata/configs/text/eng"
+GITHOOKS="$ROOT/githooks"
+VSCODE="$ROOT/.vscode"
+GITHUB_WF="$ROOT/.github/workflows"
 LOCAL="${DORN_COMMON_LOCAL:-$ROOT/../Dorns_Common}"
 REMOTE="${DORN_COMMON_REPO:-https://github.com/JoshuaCarter/GAMMA-Common.git}"
+
+SYNC_PATHS=(
+	gamedata/scripts/dorn_mcm.script
+	gamedata/scripts/dorn_dbg.script
+	gamedata/scripts/dorn_sys.script
+	gamedata/textures/dorn_mcm_banner.dds
+	tools/dorn_common.template.script
+	tools/githooks/pre-commit
+	tools/mod/.editorconfig
+	tools/mod/.gitattributes
+	tools/mod/.gitignore
+	tools/mod/.github/workflows/release.yml
+	tools/mod/.vscode/settings.json
+)
+
+# src_rel:dest_rel pairs — copied byte-for-byte into the target mod repo root
+UNIVERSAL_PAIRS=(
+	tools/mod/.editorconfig:.editorconfig
+	tools/mod/.gitattributes:.gitattributes
+	tools/mod/.gitignore:.gitignore
+	tools/mod/.github/workflows/release.yml:.github/workflows/release.yml
+	tools/mod/.vscode/settings.json:.vscode/settings.json
+)
 
 TMP_CLONE=""
 cleanup() {
@@ -94,10 +79,13 @@ trap cleanup EXIT
 
 SRC=""
 if [[ -f "$LOCAL/gamedata/scripts/dorn_mcm.script" ]]; then
-	if [[ -d "$LOCAL/.git" ]] && [[ -n "$(git -C "$LOCAL" status --porcelain -- gamedata/scripts 2>/dev/null)" ]]; then
-		echo "sync-dorn-common: ${LOCAL} has uncommitted changes — commit them first" >&2
-		echo "  (the synced commit hash must match what actually gets copied)" >&2
-		exit 1
+	if [[ -d "$LOCAL/.git" ]]; then
+		for rel in "${SYNC_PATHS[@]}"; do
+			if [[ -n "$(git -C "$LOCAL" status --porcelain -- "$rel" 2>/dev/null)" ]]; then
+				echo "sync-dorn-common: ${LOCAL} has uncommitted changes in ${rel} — commit them first" >&2
+				exit 1
+			fi
+		done
 	fi
 	SRC="$LOCAL"
 else
@@ -110,29 +98,69 @@ COMMIT="$(git -C "$SRC" rev-parse --short=8 HEAD)"
 TEMPLATE="$SRC/tools/dorn_common.template.script"
 [[ -f "$TEMPLATE" ]] || { echo "sync-dorn-common: missing ${TEMPLATE}" >&2; exit 1; }
 
-dest_file() { echo "$SCRIPTS/${1}_${COMMIT}.script"; }
+dest_script() { echo "$SCRIPTS/${1}_${COMMIT}.script"; }
+dest_banner() { echo "$TEXTURES/dorn_mcm_banner_${COMMIT}.dds"; }
 
 expected_loader() {
 	sed "s/@COMMIT@/$COMMIT/g" "$TEMPLATE" > "$1"
 }
 
-# Matches (with any leading whitespace, e.g. tabs): local DORN_COMMON_VERSION = "dorn_common_<hex>"
+expected_mcm() {
+	sed "s/@COMMIT@/$COMMIT/g" "$SRC/gamedata/scripts/dorn_mcm.script" > "$1"
+}
+
 VERSION_RE='DORN_COMMON_VERSION[[:space:]]*=[[:space:]]*"dorn_common_[0-9a-f]+"'
+
+sync_universal() {
+	local pair src_rel dest_rel src_path dest_path
+	for pair in "${UNIVERSAL_PAIRS[@]}"; do
+		src_rel="${pair%%:*}"
+		dest_rel="${pair#*:}"
+		src_path="$SRC/$src_rel"
+		dest_path="$ROOT/$dest_rel"
+		[[ -f "$src_path" ]] || { echo "sync-dorn-common: missing ${src_path}" >&2; return 1; }
+		mkdir -p "$(dirname "$dest_path")"
+		if [[ ! -f "$dest_path" ]] || ! cmp -s "$src_path" "$dest_path"; then
+			cp "$src_path" "$dest_path"
+			return 2
+		fi
+	done
+	return 0
+}
+
+verify_universal() {
+	local pair src_rel dest_rel src_path dest_path
+	for pair in "${UNIVERSAL_PAIRS[@]}"; do
+		src_rel="${pair%%:*}"
+		dest_rel="${pair#*:}"
+		src_path="$SRC/$src_rel"
+		dest_path="$ROOT/$dest_rel"
+		cmp -s "$src_path" "$dest_path" || return 1
+	done
+	return 0
+}
 
 verify_install() {
 	local src_scripts="$SRC/gamedata/scripts"
-	for name in dorn_mcm dorn_dbg dorn_sys; do
-		cmp -s "$src_scripts/${name}.script" "$(dest_file "$name")" || return 1
+	local tmp
+
+	tmp="$(mktemp)"
+	expected_mcm "$tmp"
+	cmp -s "$tmp" "$(dest_script dorn_mcm)" || { rm -f "$tmp"; return 1; }
+	rm -f "$tmp"
+
+	for name in dorn_dbg dorn_sys; do
+		cmp -s "$src_scripts/${name}.script" "$(dest_script "$name")" || return 1
 	done
 
-	local tmp
 	tmp="$(mktemp)"
 	expected_loader "$tmp"
-	if ! cmp -s "$tmp" "$(dest_file dorn_common)"; then
-		rm -f "$tmp"
-		return 1
-	fi
+	cmp -s "$tmp" "$(dest_script dorn_common)" || { rm -f "$tmp"; return 1; }
 	rm -f "$tmp"
+
+	cmp -s "$SRC/gamedata/textures/dorn_mcm_banner.dds" "$(dest_banner)" || return 1
+	cmp -s "$SRC/tools/githooks/pre-commit" "$GITHOOKS/pre-commit" || return 1
+	verify_universal || return 1
 
 	while IFS= read -r -d '' f; do
 		grep -Eq "$VERSION_RE" "$f" || continue
@@ -152,33 +180,60 @@ fi
 
 UPDATED=0
 
-mkdir -p "$SCRIPTS"
+mkdir -p "$SCRIPTS" "$TEXTURES" "$TEXT_ENG" "$GITHOOKS" "$VSCODE" "$GITHUB_WF"
 
-# Migration: drop the old common_<hash>/ subdirectory layout and the old
-# generated <mod_id>_common.script entry (both broke module loading — see
-# notes at the top of this file), plus any stale flat
-# dorn_{mcm,dbg,sys,common}_<hash>.script files from a previous commit.
 while IFS= read -r old; do
 	[[ -n "$old" ]] && { rm -rf "$old"; UPDATED=1; }
 done < <(find "$SCRIPTS" -maxdepth 1 -type d -name 'common_*' 2>/dev/null || true)
 while IFS= read -r old; do
-	# Old generated entry scripts were named "<mod_id>_common.script" (suffix
-	# "_common.script"); the new loader is "dorn_common_<hash>.script"
-	# (prefix "dorn_common_"), so this glob can't touch it.
 	[[ -n "$old" ]] && { rm -f "$old"; UPDATED=1; }
 done < <(find "$SCRIPTS" -maxdepth 1 -type f -name '*_common.script' 2>/dev/null || true)
 for name in dorn_mcm dorn_dbg dorn_sys dorn_common; do
 	while IFS= read -r old; do
-		if [[ -n "$old" && "$old" != "$(dest_file "$name")" ]]; then
+		if [[ -n "$old" && "$old" != "$(dest_script "$name")" ]]; then
 			rm -f "$old"
 			UPDATED=1
 		fi
 	done < <(find "$SCRIPTS" -maxdepth 1 -type f -name "${name}_*.script" 2>/dev/null || true)
 done
+while IFS= read -r old; do
+	if [[ -n "$old" && "$old" != "$(dest_banner)" ]]; then
+		rm -f "$old"
+		UPDATED=1
+	fi
+done < <(find "$TEXTURES" -maxdepth 1 -type f -name 'dorn_mcm_banner_*.dds' 2>/dev/null || true)
+while IFS= read -r old; do
+	if [[ -n "$old" ]]; then
+		rm -f "$old"
+		UPDATED=1
+	fi
+done < <(find "$TEXTURES" -maxdepth 1 -type f -name 'dorn_mcm_banner.dds' 2>/dev/null || true)
+while IFS= read -r old; do
+	if [[ -n "$old" ]]; then
+		rm -f "$old"
+		UPDATED=1
+	fi
+done < <(find "$TEXT_ENG" -maxdepth 1 -type f -name 'ui_mcm_dorn_common_*.xml' 2>/dev/null || true)
+while IFS= read -r old; do
+	if [[ -n "$old" ]]; then
+		rm -f "$old"
+		UPDATED=1
+	fi
+done < <(find "$TEXT_ENG" -maxdepth 1 -type f -name 'ui_mcm_dorn_common.xml' 2>/dev/null || true)
 
-for name in dorn_mcm dorn_dbg dorn_sys; do
+MCM_TMP="$(mktemp)"
+expected_mcm "$MCM_TMP"
+MCM_DST="$(dest_script dorn_mcm)"
+if [[ ! -f "$MCM_DST" ]] || ! cmp -s "$MCM_TMP" "$MCM_DST"; then
+	mv "$MCM_TMP" "$MCM_DST"
+	UPDATED=1
+else
+	rm -f "$MCM_TMP"
+fi
+
+for name in dorn_dbg dorn_sys; do
 	src="$SRC/gamedata/scripts/${name}.script"
-	dst="$(dest_file "$name")"
+	dst="$(dest_script "$name")"
 	if [[ ! -f "$dst" ]] || ! cmp -s "$src" "$dst"; then
 		cp "$src" "$dst"
 		UPDATED=1
@@ -187,7 +242,7 @@ done
 
 LOADER_TMP="$(mktemp)"
 expected_loader "$LOADER_TMP"
-LOADER_DST="$(dest_file dorn_common)"
+LOADER_DST="$(dest_script dorn_common)"
 if [[ ! -f "$LOADER_DST" ]] || ! cmp -s "$LOADER_TMP" "$LOADER_DST"; then
 	mv "$LOADER_TMP" "$LOADER_DST"
 	UPDATED=1
@@ -195,8 +250,29 @@ else
 	rm -f "$LOADER_TMP"
 fi
 
-# Rewrite the commit baked into any *.script file's DORN_COMMON_VERSION
-# constant, in place, so there's no manual edit to remember.
+BANNER_SRC="$SRC/gamedata/textures/dorn_mcm_banner.dds"
+BANNER_DST="$(dest_banner)"
+if [[ ! -f "$BANNER_DST" ]] || ! cmp -s "$BANNER_SRC" "$BANNER_DST"; then
+	cp "$BANNER_SRC" "$BANNER_DST"
+	UPDATED=1
+fi
+
+HOOK_SRC="$SRC/tools/githooks/pre-commit"
+HOOK_DST="$GITHOOKS/pre-commit"
+if [[ ! -f "$HOOK_DST" ]] || ! cmp -s "$HOOK_SRC" "$HOOK_DST"; then
+	cp "$HOOK_SRC" "$HOOK_DST"
+	chmod +x "$HOOK_DST"
+	UPDATED=1
+fi
+
+sync_rc=0
+sync_universal || sync_rc=$?
+if [[ "$sync_rc" == "2" ]]; then
+	UPDATED=1
+elif [[ "$sync_rc" != "0" ]]; then
+	exit "$sync_rc"
+fi
+
 while IFS= read -r -d '' f; do
 	grep -Eq "$VERSION_RE" "$f" || continue
 	grep -Eq "\"dorn_common_${COMMIT}\"" "$f" && continue
@@ -207,6 +283,6 @@ done < <(find "$SCRIPTS" -type f -name '*.script' -print0)
 
 echo "sync-dorn-common: ${COMMIT} (source: ${SRC})"
 if [[ "$UPDATED" == "1" ]]; then
-	echo "sync-dorn-common: updated — git add gamedata/scripts"
+	echo "sync-dorn-common: updated — git add .editorconfig .gitattributes .gitignore .github/workflows/release.yml .vscode gamedata/scripts gamedata/textures githooks/pre-commit"
 fi
 exit 0

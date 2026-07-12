@@ -1,0 +1,22 @@
+#!/bin/sh
+# Sync-managed — copied from Dorns_Common/tools/githooks/pre-commit on every sync.
+set -e
+cd "$(git rev-parse --show-toplevel)"
+
+COMMON_TOOLS="../Dorns_Common/tools"
+if [ ! -d "$COMMON_TOOLS" ]; then
+	echo "pre-commit: Dorns_Common not found at $COMMON_TOOLS (needed for sync)"
+	exit 1
+fi
+
+bash "$COMMON_TOOLS/sync-dorn-common.sh"
+
+SYNC_GLOBS=".editorconfig .gitattributes .gitignore .github/workflows/release.yml .vscode/settings.json gamedata/scripts gamedata/textures githooks/pre-commit"
+UNSTAGED="$(git diff --name-only -- $SYNC_GLOBS)"
+UNTRACKED="$(git ls-files --others --exclude-standard -- $SYNC_GLOBS)"
+if [ -n "$UNSTAGED" ] || [ -n "$UNTRACKED" ]; then
+	echo "sync output isn't staged yet:"
+	printf '%s\n%s\n' "$UNSTAGED" "$UNTRACKED" | sed '/^$/d'
+	echo "Run: git add $SYNC_GLOBS"
+	exit 1
+fi

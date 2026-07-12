@@ -1,8 +1,21 @@
 --[[
-	Dorn MCM — thin getters/setters over ui_mcm (namespace module, no globals).
+	Dorn MCM — getters/setters over ui_mcm plus shared MCM UI helpers.
 
-	Loaded via <mod_id>_common; use DORN.mcm from <mod_id>_common.get().
+	Loaded via dorn_common_<commit>; use DORN.mcm from on_game_start().
+	BANNER_LINK is substituted to dorn_mcm_banner_<commit> at sync time.
 ]]
+
+local BANNER_LINK = "dorn_mcm_banner_@COMMIT@"
+local MODS_LIST_LINK = "github.com/JoshuaCarter/GAMMA-Mods"
+local MODS_LIST_CLR = nil
+
+local function mods_list_slide_hook(_anchor, handlers)
+	if not MODS_LIST_CLR then
+		MODS_LIST_CLR = GetARGB(255, 96, 160, 255)
+	end
+	handlers.txt:SetText(MODS_LIST_LINK)
+	handlers.txt:SetTextColor(MODS_LIST_CLR)
+end
 
 local function path(mod_id, key)
 	return tostring(mod_id) .. "/" .. tostring(key)
@@ -88,4 +101,21 @@ function range(mod_id, min_key, max_key, min_default, max_default, min_floor)
 	end
 
 	return result
+end
+
+function with_header(items)
+	local gr = {
+		{
+			id = "banner",
+			type = "slide",
+			link = BANNER_LINK,
+			size = { 512, 50 },
+			spacing = 20,
+			ui_hook_functor = { mods_list_slide_hook },
+		},
+	}
+	for i = 1, #items do
+		gr[#gr + 1] = items[i]
+	end
+	return gr
 end
