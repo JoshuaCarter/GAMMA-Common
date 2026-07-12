@@ -44,6 +44,7 @@ patch_file() {
 		unless (/MCM\\.with_header\\(/) {
 			s/(\\n\\t\\t\\t\\tsh = true,\\n(?:\\t\\t\\t\\ttext = [^\\n]+,\\n)?\\t\\t\\t\\t)gr = \\{/\$1gr = MCM.with_header({/g;
 		}
+		while (s/(gr = MCM\\.with_header\\(\\{[\\s\\S]*?)\\n\\t\\t\\t\\t\\},\\n(\\t\\t\\t\\},)/\$1\\n\\t\\t\\t\\t\\}),\\n\$2/) {}
 	" "$file"
 }
 
