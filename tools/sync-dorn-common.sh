@@ -9,9 +9,10 @@
 #   gamedata/scripts/dorn_{mcm,dbg,sys,common}_<commit>.script
 #   gamedata/textures/dorn_mcm_banner_<commit>.dds
 #   githooks/pre-commit
+#   README.md mod-list footer (via tools/update-readme.sh)
 #   .editorconfig, .gitattributes, .gitignore
 #   .github/workflows/release.yml
-#   .vscode/settings.json
+#   .vscode/settings.json, .vscode/launch.json
 set -euo pipefail
 
 ROOT="$(git rev-parse --show-toplevel 2>/dev/null || true)"
@@ -52,12 +53,15 @@ SYNC_PATHS=(
 	gamedata/scripts/dorn_sys.script
 	gamedata/textures/dorn_mcm_banner.dds
 	tools/dorn_common.template.script
+	tools/patch-dorn-mcm-banner.sh
+	tools/update-readme.sh
 	tools/githooks/pre-commit
 	tools/mod/.editorconfig
 	tools/mod/.gitattributes
 	tools/mod/.gitignore
 	tools/mod/.github/workflows/release.yml
 	tools/mod/.vscode/settings.json
+	tools/mod/.vscode/launch.json
 )
 
 # src_rel:dest_rel pairs — copied byte-for-byte into the target mod repo root
@@ -67,6 +71,7 @@ UNIVERSAL_PAIRS=(
 	tools/mod/.gitignore:.gitignore
 	tools/mod/.github/workflows/release.yml:.github/workflows/release.yml
 	tools/mod/.vscode/settings.json:.vscode/settings.json
+	tools/mod/.vscode/launch.json:.vscode/launch.json
 )
 
 TMP_CLONE=""
@@ -110,6 +115,35 @@ expected_mcm() {
 }
 
 VERSION_RE='DORN_COMMON_VERSION[[:space:]]*=[[:space:]]*"dorn_common_[0-9a-f]+"'
+
+verify_readme() {
+	local script="$SRC/tools/update-readme.sh"
+	[[ -f "$script" && -f "$ROOT/README.md" && -f "$ROOT/meta.ini" ]] || return 0
+	local tmpdir ver
+	tmpdir="$(mktemp -d)"
+	cp "$ROOT/README.md" "$tmpdir/README.md"
+	ver="$(grep -E '^version=' "$ROOT/meta.ini" | head -1 | cut -d= -f2 | tr -d '[:space:]')"
+	bash "$script" "$tmpdir" "$ver"
+	cmp -s "$tmpdir/README.md" "$ROOT/README.md" || { rm -rf "$tmpdir"; return 1; }
+	rm -rf "$tmpdir"
+	return 0
+}
+
+sync_readme() {
+	local script="$SRC/tools/update-readme.sh"
+	[[ -f "$script" && -f "$ROOT/README.md" && -f "$ROOT/meta.ini" ]] || return 0
+	local before ver
+	before="$(mktemp)"
+	cp "$ROOT/README.md" "$before"
+	ver="$(grep -E '^version=' "$ROOT/meta.ini" | head -1 | cut -d= -f2 | tr -d '[:space:]')"
+	bash "$script" "$ROOT" "$ver"
+	if ! cmp -s "$before" "$ROOT/README.md"; then
+		rm -f "$before"
+		return 1
+	fi
+	rm -f "$before"
+	return 0
+}
 
 sync_universal() {
 	local pair src_rel dest_rel src_path dest_path
@@ -161,6 +195,7 @@ verify_install() {
 	cmp -s "$SRC/gamedata/textures/dorn_mcm_banner.dds" "$(dest_banner)" || return 1
 	cmp -s "$SRC/tools/githooks/pre-commit" "$GITHOOKS/pre-commit" || return 1
 	verify_universal || return 1
+	verify_readme || return 1
 
 	while IFS= read -r -d '' f; do
 		grep -Eq "$VERSION_RE" "$f" || continue
@@ -288,8 +323,13 @@ if [[ -x "$PATCH_SCRIPT" ]]; then
 	fi
 fi
 
+if ! sync_readme; then
+	UPDATED=1
+	echo "sync-dorn-common: updated README mod-list footer"
+fi
+
 echo "sync-dorn-common: ${COMMIT} (source: ${SRC})"
 if [[ "$UPDATED" == "1" ]]; then
-	echo "sync-dorn-common: updated — git add .editorconfig .gitattributes .gitignore .github/workflows/release.yml .vscode gamedata/scripts gamedata/textures githooks/pre-commit"
+	echo "sync-dorn-common: updated — git add .editorconfig .gitattributes .gitignore .github/workflows/release.yml .vscode README.md gamedata/scripts gamedata/textures githooks/pre-commit"
 fi
 exit 0

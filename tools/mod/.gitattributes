@@ -12,3 +12,11 @@
 *.gitattributes text eol=lf
 *.editorconfig text eol=lf
 githooks/pre-commit text eol=lf
+
+*.ppe binary
+*.png binary
+*.dds binary
+*.pdn binary
+*.mp4 binary
+*.omf binary
+*.ogg binary

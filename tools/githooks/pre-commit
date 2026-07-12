@@ -11,7 +11,7 @@ fi
 
 bash "$COMMON_TOOLS/sync-dorn-common.sh"
 
-SYNC_GLOBS=".editorconfig .gitattributes .gitignore .github/workflows/release.yml .vscode/settings.json gamedata/scripts gamedata/textures githooks/pre-commit"
+SYNC_GLOBS=".editorconfig .gitattributes .gitignore .github/workflows/release.yml .vscode/settings.json .vscode/launch.json README.md gamedata/scripts gamedata/textures githooks/pre-commit"
 UNSTAGED="$(git diff --name-only -- $SYNC_GLOBS)"
 UNTRACKED="$(git ls-files --others --exclude-standard -- $SYNC_GLOBS)"
 if [ -n "$UNSTAGED" ] || [ -n "$UNTRACKED" ]; then
