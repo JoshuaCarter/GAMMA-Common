@@ -11,3 +11,7 @@ Desktop.ini
 
 # ALAO (improve skill)
 *.script.alao-bak
+
+# Blender source (local authoring; not shipped in mod)
+*.blend
+*.blend1
