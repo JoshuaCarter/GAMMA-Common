@@ -318,8 +318,12 @@ done < <(find "$SCRIPTS" -type f -name '*.script' -print0)
 
 PATCH_SCRIPT="$SRC/tools/patch-dorn-mcm-banner.sh"
 if [[ -x "$PATCH_SCRIPT" ]]; then
-	if "$PATCH_SCRIPT" "$ROOT" "$COMMIT"; then
+	patch_rc=0
+	"$PATCH_SCRIPT" "$ROOT" "$COMMIT" || patch_rc=$?
+	if [[ "$patch_rc" == "1" ]]; then
 		UPDATED=1
+	elif [[ "$patch_rc" != "0" ]]; then
+		exit "$patch_rc"
 	fi
 fi
 
