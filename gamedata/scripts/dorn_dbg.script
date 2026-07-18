@@ -14,7 +14,7 @@
 
 local HUD_STATIC = "debug_info"
 local ORIGIN_X = 10
-local ORIGIN_Y = 100
+local ORIGIN_Y = 200
 
 local COLORS = {
 	white       = "%c[255,255,255,255]",
